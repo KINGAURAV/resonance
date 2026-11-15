@@ -9,6 +9,7 @@ import {
   BufferGeometry,
   Color,
   createSystem,
+  DirectionalLight,
   Group,
   IcosahedronGeometry,
   LineBasicMaterial,
@@ -69,6 +70,12 @@ export class PlaygroundSystem extends createSystem({}) {
     // Default (non-XR) placement for a seated-height camera at the origin.
     root.position.set(0, 0.83, -LAYOUT.forward);
     stage.rootEntity = this.world.createTransformEntity(root);
+
+    // One shadowless key light so the wood and chrome of the instruments
+    // read as real materials. It travels with the playground.
+    const key = new DirectionalLight(0xfff4e6, 2.2);
+    key.position.set(-0.6, 1.4, 1.0);
+    root.add(key, key.target);
 
     this.buildCore(root);
     this.buildDust(root);

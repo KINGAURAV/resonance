@@ -32,6 +32,7 @@ import {
 import { audio } from '../audio/engine.js';
 import { GuitarChord, GuitarStrum } from '../resonance-components.js';
 import { COLORS, setShown, stage, trace } from '../stage.js';
+import { buildGuitarModel, GUITAR } from '../visuals/instruments.js';
 import { glowSprite, Label, ringTexture } from '../visuals/textures.js';
 
 // MIDI notes per string, low E (top) to high E (bottom); -1 = string muted.
@@ -42,10 +43,10 @@ const CHORDS: { name: string; color: number; notes: number[] }[] = [
   { name: 'F', color: COLORS.magenta, notes: [41, 48, 53, 57, 60, 65] },
 ];
 const STRINGS = 6;
-const SPACING = 0.016; // meters between strings
-const NECK_START = -0.3;
+const SPACING = GUITAR.spacing;
+const NECK_START = GUITAR.nutX;
 const BLOCK = 0.07; // width of one chord block
-const STRUM_MIN_X = 0.0;
+const STRUM_MIN_X = 0.03;
 const STRUM_MAX_X = 0.25;
 const STRUM_CENTER_X = 0.12;
 
@@ -100,39 +101,25 @@ export class GuitarSystem extends createSystem({
     g.rotation.x = -0.55; // face tilts up toward the seated player
     const guitarEntity = this.world.createTransformEntity(g, { parent: stage.rootEntity! });
 
-    // Neck and body are decoration: translucent so the core glows through.
-    const neck = new Mesh(
-      new BoxGeometry(0.3, 0.115, 0.005),
-      new MeshBasicMaterial({ color: 0x1a1140, transparent: true, opacity: 0.55 }),
-    );
-    neck.position.set(-0.15, 0, -0.012);
-    const body = new Mesh(
-      new CircleGeometry(0.125, 48),
-      new MeshBasicMaterial({ color: 0x241060, transparent: true, opacity: 0.4, side: DoubleSide }),
-    );
-    body.position.set(STRUM_CENTER_X, 0, -0.012);
-    const rim = new Mesh(
-      new TorusGeometry(0.125, 0.003, 8, 64),
-      new MeshBasicMaterial({ color: COLORS.gold, transparent: true, opacity: 0.8, blending: AdditiveBlending, depthWrite: false }),
-    );
-    rim.position.copy(body.position);
-    const hole = new Mesh(
-      new TorusGeometry(0.04, 0.002, 8, 40),
-      new MeshBasicMaterial({ color: COLORS.cyan, transparent: true, opacity: 0.7, blending: AdditiveBlending, depthWrite: false }),
-    );
-    hole.position.set(STRUM_CENTER_X, 0, -0.01);
-    for (const m of [neck, body, rim, hole]) {
-      m.raycast = () => {};
-      g.add(m);
-    }
+    // The instrument itself is decoration; raise it so the strings sit just
+    // above the frets.
+    const model = buildGuitarModel();
+    model.position.z = 0.009;
+    g.add(model);
 
+    const stringLen = GUITAR.bridgeX - GUITAR.nutX;
     for (let i = 0; i < STRINGS; i++) {
+      const r = 0.0011 - i * 0.00012;
       const s = new Mesh(
-        new CylinderGeometry(0.0013 - i * 0.00012, 0.0013 - i * 0.00012, 0.55, 6),
-        new MeshBasicMaterial({ color: 0xe8fbff, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false }),
+        new CylinderGeometry(r, r, stringLen, 6),
+        // Wound bronze for the three low strings, plain steel for the rest.
+        new MeshStandardMaterial({
+          color: i < 3 ? 0xc79a55 : 0xe9edf2, metalness: 1, roughness: 0.3,
+          emissive: 0xfff2d0, emissiveIntensity: 0,
+        }),
       );
       s.rotation.z = Math.PI / 2; // lie along x
-      s.position.set(-0.025, stringY(i), 0);
+      s.position.set(GUITAR.nutX + stringLen / 2, stringY(i), 0);
       s.raycast = () => {};
       this.strings.push(s);
       g.add(s);
@@ -141,13 +128,14 @@ export class GuitarSystem extends createSystem({
     CHORDS.forEach((c, id) => {
       const mat = new MeshStandardMaterial({
         color: c.color, emissive: c.color, emissiveIntensity: 0.3,
-        transparent: true, opacity: 0.5, roughness: 0.3,
+        transparent: true, opacity: 0.4, roughness: 0.3, depthWrite: false,
       });
-      const block = new Mesh(new BoxGeometry(BLOCK - 0.008, 0.105, 0.006), mat);
+      // A coloured zone laid over the fretboard, under the strings.
+      const block = new Mesh(new BoxGeometry(BLOCK - 0.006, 0.066, 0.003), mat);
       block.name = `Chord ${c.name}`;
-      block.position.set(NECK_START + BLOCK * (id + 0.5), 0, -0.006);
+      block.position.set(NECK_START + BLOCK * (id + 0.5), 0, -0.0035);
       const label = new Label(c.name, 0.03, '#ffffff');
-      label.sprite.position.set(0, 0.075, 0.01);
+      label.sprite.position.set(0, 0.06, 0.01);
       block.add(label.sprite);
       const e = this.world.createTransformEntity(block, { parent: guitarEntity });
       e.addComponent(GuitarChord, { id });
@@ -171,7 +159,7 @@ export class GuitarSystem extends createSystem({
     this.guide.raycast = () => {};
     this.guide.position.set(STRUM_CENTER_X, 0, 0.01);
     this.guide.visible = false;
-    g.add(this.guide, glowSprite(COLORS.gold, 0.3, 0.12));
+    g.add(this.guide);
     this.status = new Label('', 0.034, '#ffffff');
     this.status.sprite.position.set(0, 0.2, -0.06);
     g.add(this.status.sprite);
@@ -372,8 +360,7 @@ export class GuitarSystem extends createSystem({
       const v = this.vib[i];
       const s = this.strings[i];
       s.position.y = stringY(i) + Math.sin(time * (70 + i * 13)) * v * 0.0035;
-      (s.material as MeshBasicMaterial).opacity = 0.55 + v * 0.45;
-      s.scale.set(1 + v * 1.5, 1, 1 + v * 1.5); // glow thicker while ringing
+      (s.material as MeshStandardMaterial).emissiveIntensity = v * 1.6; // ringing strings shine
     }
     for (let id = 0; id < this.blocks.length; id++) {
       const b = this.blocks[id];
@@ -382,7 +369,7 @@ export class GuitarSystem extends createSystem({
       // The chord the lesson wants blinks until the player selects it.
       const call = id === wanted && !active ? 0.9 + Math.sin(time * 12) * 0.6 : 0;
       b.mat.emissiveIntensity = (active ? 1.3 : 0.25) + b.pulse * 1.5 + call;
-      b.mat.opacity = active ? 0.85 : 0.45;
+      b.mat.opacity = active ? 0.8 : 0.32;
     }
   }
 }

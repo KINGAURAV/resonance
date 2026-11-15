@@ -26,6 +26,7 @@ import {
 import { audio, type VoiceKind } from '../audio/engine.js';
 import { DrumPad } from '../resonance-components.js';
 import { COLORS, setShown, stage, trace } from '../stage.js';
+import { buildCymbal, buildDrum } from '../visuals/instruments.js';
 import { glowSprite, Label, ringTexture } from '../visuals/textures.js';
 
 interface PadDef {
@@ -45,6 +46,8 @@ const KIT: PadDef[] = [
   { voice: 'crash', name: 'Crash', color: COLORS.magenta, radius: 0.05, pos: [0.27, 0.07, -0.03] },
 ];
 const PAD_TILT = 0.5; // radians: pads lean toward the player
+const SHELL_COLOR = 0x8e1b2e; // wine-red lacquer
+const DEPTH: Partial<Record<VoiceKind, number>> = { kick: 0.09, snare: 0.045, tom: 0.065 };
 
 // Each lesson is one bar of eighth notes; -1 is a rest. Pad ids index KIT.
 const LESSONS: { name: string; steps: number[] }[] = [
@@ -63,6 +66,8 @@ const GUIDES = 6;
 interface PadState {
   def: PadDef;
   object: Group;
+  model: Group;
+  cymbal: boolean;
   mat: MeshStandardMaterial;
   pulse: number;
   lastHit: number;
@@ -99,27 +104,20 @@ export class DrumSystem extends createSystem({
     KIT.forEach((def, id) => {
       const object = new Group();
       object.name = `Drum ${def.name}`;
-      const mat = new MeshStandardMaterial({
-        color: def.color, emissive: def.color, emissiveIntensity: 0.35,
-        transparent: true, opacity: 0.8, roughness: 0.25, metalness: 0.2,
-      });
-      const head = new Mesh(new CylinderGeometry(def.radius, def.radius * 0.92, 0.012, 40), mat);
-      const rim = new Mesh(
-        new TorusGeometry(def.radius, 0.0025, 8, 48),
-        new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, blending: AdditiveBlending, depthWrite: false }),
-      );
-      rim.rotation.x = Math.PI / 2;
-      rim.position.y = 0.006;
-      rim.raycast = () => {};
+      const cymbal = def.voice === 'hat' || def.voice === 'crash';
+      const model = cymbal
+        ? buildCymbal(def.radius, def.voice === 'hat', def.color)
+        : buildDrum(def.radius, DEPTH[def.voice] ?? 0.05, SHELL_COLOR, def.color);
+      const mat = model.hitMaterial;
       const label = new Label(def.name, 0.021);
       label.sprite.position.set(0, -0.034, def.radius + 0.022);
-      object.add(head, rim, glowSprite(def.color, def.radius * 3.2, 0.3), label.sprite);
+      object.add(model.group, glowSprite(def.color, def.radius * 3, 0.1), label.sprite);
       object.position.set(def.pos[0], def.pos[1], def.pos[2]);
       object.rotation.x = PAD_TILT;
       const e = this.world.createTransformEntity(object, { parent: stage.rootEntity! });
       e.addComponent(DrumPad, { id });
       e.addComponent(RayInteractable); // mouse / far-pinch fallback
-      this.pads.push({ def, object, mat, pulse: 0, lastHit: -1 });
+      this.pads.push({ def, object, model: model.group, cymbal, mat, pulse: 0, lastHit: -1 });
       setShown(object, false);
     });
 
@@ -307,7 +305,7 @@ export class DrumSystem extends createSystem({
     if (now > this.startTime + (PASS_STEPS - 1) * STEP + HIT_WINDOW + 0.05) this.finishAttempt();
   }
 
-  update(delta: number): void {
+  update(delta: number, time: number): void {
     const visible = stage.mode === 'drums';
     if (this.kit.visible !== visible) {
       setShown(this.kit, visible);
@@ -320,10 +318,10 @@ export class DrumSystem extends createSystem({
     if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectStrikes(delta);
     if (this.learning) this.updateLesson(dt);
     for (const pad of this.pads) {
-      pad.pulse = Math.max(0, pad.pulse - dt * 4);
-      pad.mat.emissiveIntensity = 0.35 + pad.pulse * 2.2;
-      const s = 1 - pad.pulse * 0.06; // the head dips slightly when struck
-      pad.object.scale.set(1, s, 1);
+      pad.pulse = Math.max(0, pad.pulse - dt * (pad.cymbal ? 1.6 : 4));
+      pad.mat.emissiveIntensity = pad.pulse * (pad.cymbal ? 0.9 : 0.7);
+      // Cymbals rock on their stand after a hit; drums stay put.
+      if (pad.cymbal) pad.model.rotation.z = Math.sin(time * 34) * pad.pulse * 0.1;
     }
   }
 }
