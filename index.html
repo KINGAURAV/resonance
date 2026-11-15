@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <link rel="icon" href="data:," />
+    <title>RESONANCE</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #03040c; overflow: hidden; }
+      #overlay {
+        position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 18px; text-align: center;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #d8f6ff;
+        background: radial-gradient(circle at 50% 45%, rgba(60, 30, 120, 0.55), rgba(3, 4, 12, 0.92) 70%);
+      }
+      #overlay h1 { margin: 0; font-size: clamp(36px, 8vw, 84px); font-weight: 600; letter-spacing: 0.32em; text-shadow: 0 0 28px #35e0ff; }
+      #overlay p { margin: 0; font-size: clamp(14px, 2.2vw, 20px); opacity: 0.8; letter-spacing: 0.06em; }
+      #overlay button {
+        font: inherit; font-size: 18px; padding: 14px 34px; border-radius: 999px; cursor: pointer;
+        color: #03040c; background: #35e0ff; border: none; box-shadow: 0 0 28px rgba(53, 224, 255, 0.6);
+      }
+      #overlay button.ghost { background: transparent; color: #d8f6ff; border: 1px solid rgba(216, 246, 255, 0.4); box-shadow: none; font-size: 15px; padding: 10px 24px; }
+    </style>
+  </head>
+  <body>
+    <div id="scene-container"></div>
+    <div id="overlay">
+      <h1>RESONANCE</h1>
+      <p>Touch sound. Shape music. Create your universe.</p>
+      <button id="enter-vr">Enter with your hands</button>
+      <button id="preview" class="ghost">Preview in browser</button>
+    </div>
+    <script type="module" src="/src/index.ts"></script>
+  </body>
+</html>
