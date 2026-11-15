@@ -208,7 +208,8 @@ export class GuitarSystem extends createSystem({
     if (midi >= 0) {
       this.guitar.getWorldPosition(this.worldPos);
       audio.play('pluck', midiFreq(midi), {
-        when, velocity: velocity * 0.75, brightness: 0.55,
+        // Kept quiet and dark on purpose: six strings ring at once.
+        when, velocity: velocity * 0.45, brightness: 0.25,
         x: this.worldPos.x, y: this.worldPos.y, z: this.worldPos.z,
       });
     }
