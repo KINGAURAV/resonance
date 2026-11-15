@@ -55,6 +55,8 @@ export const stage = {
   resonators: [] as ResonatorState[],
   /** Slot -> resonator id, or -1. */
   slots: new Int8Array(LAYOUT.steps * LAYOUT.ringRadii.length).fill(-1),
+  /** Which instrument space is showing. */
+  mode: 'playground' as 'playground' | 'drums',
   playing: true,
   /** Built-in drum groove synced to the sequencer. */
   beat: false,
@@ -70,6 +72,10 @@ export const stage = {
   ripple: (_x: number, _y: number, _z: number, _color: number, _size: number) => {},
   burst: (_x: number, _y: number, _z: number, _color: number, _count: number) => {},
   toast: (_text: string) => {},
+  /** Extra pebble actions registered by other systems (action -> handler). */
+  actions: {} as Record<string, () => void>,
+  setPebbleLabel: (_action: string, _text: string) => {},
+  setMode: (_mode: 'playground' | 'drums') => {},
 };
 
 /** Root-local position of a sequencer slot. */

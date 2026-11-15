@@ -1,5 +1,6 @@
 import { World } from '@iwsdk/core';
 import projectOptions from 'virtual:iwsdk-project';
+import { DrumSystem } from './systems/drums.js';
 import { PlaygroundSystem } from './systems/playground.js';
 import { ResonatorSystem } from './systems/resonators.js';
 import { SequencerSystem } from './systems/sequencer.js';
@@ -16,5 +17,6 @@ World.create(
   world.registerSystem(ResonatorSystem);
   world.registerSystem(StringSystem);
   world.registerSystem(SequencerSystem);
+  world.registerSystem(DrumSystem);
   world.registerSystem(UISystem);
 });

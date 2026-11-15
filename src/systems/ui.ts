@@ -24,6 +24,7 @@ import { resetResonator } from './resonators.js';
 
 interface PebbleState {
   action: string;
+  mode: 'playground' | 'drums';
   object: Group;
   mat: MeshStandardMaterial;
   label: Label;
@@ -34,15 +35,19 @@ const DONE_KEY = 'resonance.introDone';
 const HINTS = ['Touch to create sound', 'Grab. Stretch. Pluck.', 'Create your rhythm: drop a shape on an orbit', ''];
 
 // Left column = performance, right column = composition.
-const PEBBLES: [string, string, number, number][] = [
-  ['play', 'Pause', -1, 0],
-  ['beat', 'Beat', -1, 1],
-  ['slower', 'Slower', -1, 2],
-  ['faster', 'Faster', -1, 3],
-  ['save', 'Save', 1, 0],
-  ['load', 'Load', 1, 1],
-  ['clear', 'Reset', 1, 2],
-  ['intro', 'Skip intro', 1, 3],
+// [action, label, side, grid cell, mode it belongs to]
+const PEBBLES: [string, string, number, number, 'playground' | 'drums'][] = [
+  ['play', 'Pause', -1, 0, 'playground'],
+  ['beat', 'Beat', -1, 1, 'playground'],
+  ['slower', 'Slower', -1, 2, 'playground'],
+  ['faster', 'Faster', -1, 3, 'playground'],
+  ['save', 'Save', 1, 0, 'playground'],
+  ['load', 'Load', 1, 1, 'playground'],
+  ['clear', 'Reset', 1, 2, 'playground'],
+  ['intro', 'Skip intro', 1, 3, 'playground'],
+  ['drums', 'Drums', 1, 4, 'playground'],
+  ['learn', 'Learn a beat', 1, 4, 'drums'],
+  ['playground', 'Playground', 1, 5, 'drums'],
 ];
 
 export class UISystem extends createSystem({
@@ -56,10 +61,10 @@ export class UISystem extends createSystem({
 
   init(): void {
     const geo = new SphereGeometry(0.017, 20, 14);
-    for (const [action, text, side, row] of PEBBLES) {
+    for (const [action, text, side, row, mode] of PEBBLES) {
       const object = new Group();
       object.name = `Pebble ${action}`;
-      const color = side < 0 ? COLORS.cyan : COLORS.violet;
+      const color = action === 'drums' || mode === 'drums' ? COLORS.gold : side < 0 ? COLORS.cyan : COLORS.violet;
       const mat = new MeshStandardMaterial({
         color, emissive: color, emissiveIntensity: 0.5,
         transparent: true, opacity: 0.85, roughness: 0.2, metalness: 0.2,
@@ -80,7 +85,7 @@ export class UISystem extends createSystem({
       e.addComponent(Pebble, { action });
       e.addComponent(RayInteractable);
       e.addComponent(PokeInteractable);
-      this.pebbles.push({ action, object, mat, label, pulse: 0 });
+      this.pebbles.push({ action, mode, object, mat, label, pulse: 0 });
     }
 
     this.hint = new Label('', 0.024, '#ffffff');
@@ -100,6 +105,12 @@ export class UISystem extends createSystem({
     stage.onNote = () => this.progress(0, 1.4);
     stage.onPluck = () => this.progress(1, 1.8);
     stage.onDock = () => this.progress(2, 2.5);
+    stage.setPebbleLabel = (action, text) =>
+      this.pebbles.find((x) => x.action === action)?.label.set(text);
+    stage.setMode = (mode) => {
+      stage.mode = mode;
+      this.applyVisibility();
+    };
 
     let done = false;
     try {
@@ -141,15 +152,7 @@ export class UISystem extends createSystem({
     stage.tutorialStep = step;
     this.advanceIn = -1;
     this.hint.set(HINTS[step]);
-    // Reveal things progressively so there is only ever one new idea.
-    stage.resonators.forEach((r, i) => {
-      r.shown = step >= 2 || i === 0;
-      setShown(r.object, r.shown);
-    });
-    for (const p of this.pebbles) {
-      setShown(p.object, step >= 3 || p.action === 'intro');
-      if (p.action === 'intro') p.label.set(step >= 3 ? 'Replay intro' : 'Skip intro');
-    }
+    this.applyVisibility();
     if (step >= 3) {
       try {
         localStorage.setItem(DONE_KEY, '1');
@@ -157,6 +160,22 @@ export class UISystem extends createSystem({
         /* ignore */
       }
       stage.toast('The playground is yours');
+    }
+  }
+
+  /** Show only what belongs to the current mode and intro step. */
+  private applyVisibility(): void {
+    const step = stage.tutorialStep;
+    const play = stage.mode === 'playground';
+    // Reveal things progressively so there is only ever one new idea.
+    stage.resonators.forEach((r, i) => {
+      r.shown = play && (step >= 2 || i === 0);
+      setShown(r.object, r.shown);
+    });
+    for (const p of this.pebbles) {
+      const inMode = p.mode === stage.mode;
+      setShown(p.object, inMode && (!play || step >= 3 || p.action === 'intro'));
+      if (p.action === 'intro') p.label.set(step >= 3 ? 'Replay intro' : 'Skip intro');
     }
   }
 
@@ -193,6 +212,16 @@ export class UISystem extends createSystem({
         stage.stringEnds[1].set(0.13, 0.02, 0.25);
         stage.toast('Reset');
         break;
+      case 'drums':
+        stage.setMode('drums');
+        stage.toast('Drum kit: hit the pads');
+        break;
+      case 'playground':
+        stage.setMode('playground');
+        break;
+      default:
+        stage.actions[action]?.();
+        break;
       case 'intro':
         if (stage.tutorialStep >= 3) {
           stage.resonators.forEach((r) => resetResonator(r));
@@ -213,7 +242,7 @@ export class UISystem extends createSystem({
 
     // Hint floats above whatever the current step is about.
     const step = stage.tutorialStep;
-    const show = step < 3 && this.advanceIn < 0;
+    const show = step < 3 && this.advanceIn < 0 && stage.mode === 'playground';
     this.hintAlpha += ((show ? 1 : 0) - this.hintAlpha) * (1 - Math.exp(-dt * 5));
     this.hint.opacity = this.hintAlpha;
     const s = this.hint.sprite;

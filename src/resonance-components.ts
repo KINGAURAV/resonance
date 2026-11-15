@@ -17,3 +17,8 @@ export const StringHandle = createComponent('StringHandle', {
 
 /** Invisible collider along the string so a ray/mouse can pluck it too. */
 export const StringBody = createComponent('StringBody', {});
+
+/** A drum pad. `id` indexes the kit definition in the drum system. */
+export const DrumPad = createComponent('DrumPad', {
+  id: { type: Types.Int8, default: 0 },
+});

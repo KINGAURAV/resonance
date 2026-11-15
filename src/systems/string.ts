@@ -240,7 +240,7 @@ export class StringSystem extends createSystem({
   }
 
   update(delta: number, time: number): void {
-    const visible = stage.tutorialStep >= 1;
+    const visible = stage.tutorialStep >= 1 && stage.mode === 'playground';
     if (this.group.visible !== visible) this.setVisible(visible);
     if (!visible) return;
     const dt = Math.min(delta, 0.05);

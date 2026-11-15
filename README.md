@@ -18,6 +18,10 @@ Competition 2026 — Entertainment track, New Experience division.
 - Poke the floating pebbles: Pause/Play, Beat, Slower/Faster, Save, Load,
   Reset, Replay intro.
 
+- Poke **Drums** to swap to a five-pad hand drum kit. **Learn a beat** runs
+  three short lessons: a ring closes on the pad to hit and lands on the beat;
+  hits are scored against the audio clock.
+
 All sound is synthesized in the browser (Web Audio); nothing is downloaded and
 no network service is used.
 
@@ -45,6 +49,7 @@ On this machine Node 22 is installed side by side:
 | `src/systems/resonators.ts` | The five resonators: touch, grab, height-to-pitch, docking |
 | `src/systems/string.ts` | Stretchable string and pluck detection |
 | `src/systems/sequencer.ts` | Orbital sequencer scheduled on the audio clock |
+| `src/systems/drums.ts` | Drum kit, strike detection, learn-a-beat lessons |
 | `src/systems/ui.ts` | Control pebbles, guided intro, title overlay |
 | `src/composition.ts` | Versioned JSON save/load (localStorage) |
 

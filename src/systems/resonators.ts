@@ -197,11 +197,10 @@ export class ResonatorSystem extends createSystem({
         const k = h * DEFS.length + r.id;
         if (d > TOUCH_OUT) this.armed[k] = 1;
         else if (d < TOUCH_IN && this.armed[k] && !r.held) {
+          // An impossible speed is a tracking jump: wait for a real reading.
+          if (this.tipSpeed[h] >= 6) continue;
           this.armed[k] = 0;
-          // Tracking glitches show up as impossible speeds: ignore them.
-          if (this.tipSpeed[h] < 6) {
-            this.strike(r, Math.min(1, Math.max(0.4, this.tipSpeed[h] / 0.8)));
-          }
+          this.strike(r, Math.min(1, Math.max(0.4, this.tipSpeed[h] / 0.8)));
         }
       }
     }

@@ -19,7 +19,10 @@ export type VoiceKind =
   | 'pluck' // Karplus-Strong string
   | 'kick'
   | 'snare'
-  | 'hat';
+  | 'hat'
+  | 'tom'
+  | 'crash'
+  | 'click'; // quiet metronome tick
 
 export interface PlayOptions {
   /** AudioContext time to start at. Defaults to "now". */
@@ -218,6 +221,18 @@ export class AudioEngine {
       case 'hat':
         send.gain.value = 0.1;
         end = this.voiceHat(out, t);
+        break;
+      case 'tom':
+        send.gain.value = 0.15;
+        end = this.voiceTom(out, t);
+        break;
+      case 'crash':
+        send.gain.value = 0.35;
+        end = this.voiceCrash(out, t);
+        break;
+      case 'click':
+        send.gain.value = 0;
+        end = this.voiceClick(out, freq || 1200, t);
         break;
     }
 
@@ -459,6 +474,40 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
     n.connect(hp).connect(g).connect(out);
     return t + 0.07;
+  }
+
+  private voiceTom(out: GainNode, t: number): number {
+    const ctx = this.ctx!;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.8, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    const o = this.osc('sine', 230, t, t + 0.42);
+    o.frequency.exponentialRampToValueAtTime(105, t + 0.25);
+    o.connect(g).connect(out);
+    return t + 0.42;
+  }
+
+  private voiceCrash(out: GainNode, t: number): number {
+    const ctx = this.ctx!;
+    const n = this.noiseSource(t, t + 1.3);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 3800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.32, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.25);
+    n.connect(hp).connect(g).connect(out);
+    return t + 1.3;
+  }
+
+  private voiceClick(out: GainNode, f: number, t: number): number {
+    const ctx = this.ctx!;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.25, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    const o = this.osc('sine', f, t, t + 0.06);
+    o.connect(g).connect(out);
+    return t + 0.06;
   }
 
   /** Exponentially decaying stereo noise = a soft, diffuse hall. */

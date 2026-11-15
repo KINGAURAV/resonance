@@ -77,9 +77,12 @@ export class SequencerSystem extends createSystem({}) {
   }
 
   update(): void {
-    const visible = stage.tutorialStep >= 2;
+    const visible = stage.tutorialStep >= 2 && stage.mode === 'playground';
     if (this.group.visible !== visible) setShown(this.group, visible);
-    if (!visible) return;
+    if (!visible) {
+      this.wasRunning = false; // restart cleanly when the orbits return
+      return;
+    }
 
     const now = audio.now;
     const stepDur = 60 / stage.bpm / 2; // eighth notes

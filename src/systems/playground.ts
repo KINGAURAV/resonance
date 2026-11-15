@@ -75,7 +75,7 @@ export class PlaygroundSystem extends createSystem({}) {
     this.buildFx(root);
 
     this.toast = new Label('', 0.03);
-    this.toast.sprite.position.set(0, 0.36, -0.05);
+    this.toast.sprite.position.set(0, 0.34, -0.05);
     this.toast.opacity = 0;
     root.add(this.toast.sprite);
 
