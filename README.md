@@ -21,6 +21,9 @@ Competition 2026 — Entertainment track, New Experience division.
 - Poke **Drums** to swap to a five-pad hand drum kit. **Learn a beat** runs
   three short lessons: a ring closes on the pad to hit and lands on the beat;
   hits are scored against the audio clock.
+- Poke **Guitar** for an air guitar: touch a chord block on the neck (C, G, Am,
+  F) and strum across the six strings. **Learn a song** runs three lessons that
+  end in a four-chord song.
 
 All sound is synthesized in the browser (Web Audio); nothing is downloaded and
 no network service is used.
@@ -50,6 +53,7 @@ On this machine Node 22 is installed side by side:
 | `src/systems/string.ts` | Stretchable string and pluck detection |
 | `src/systems/sequencer.ts` | Orbital sequencer scheduled on the audio clock |
 | `src/systems/drums.ts` | Drum kit, strike detection, learn-a-beat lessons |
+| `src/systems/guitar.ts` | Air guitar: chord blocks, strum detection, learn-a-song lessons |
 | `src/systems/ui.ts` | Control pebbles, guided intro, title overlay |
 | `src/composition.ts` | Versioned JSON save/load (localStorage) |
 

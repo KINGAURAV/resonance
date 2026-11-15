@@ -1,4 +1,4 @@
 import { defineComponents } from '@iwsdk/core';
-import { DrumPad, Pebble, Resonator, StringBody, StringHandle } from './resonance-components.js';
+import { DrumPad, GuitarChord, GuitarStrum, Pebble, Resonator, StringBody, StringHandle } from './resonance-components.js';
 
-export default defineComponents([Resonator, Pebble, StringHandle, StringBody, DrumPad]);
+export default defineComponents([Resonator, Pebble, StringHandle, StringBody, DrumPad, GuitarChord, GuitarStrum]);

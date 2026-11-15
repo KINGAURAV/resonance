@@ -79,6 +79,7 @@ export class DrumSystem extends createSystem({
   private tip = new Vector3();
   private local = new Vector3();
   private prevTip = [new Vector3(), new Vector3()];
+  private speed = [0, 0];
   private armed = new Uint8Array(2 * KIT.length).fill(1);
 
   // Learn-mode state.
@@ -238,7 +239,10 @@ export class DrumSystem extends createSystem({
     for (let h = 0; h < 2; h++) {
       this.player.indexTipSpaces[sides[h]].getWorldPosition(this.tip);
       stage.root.worldToLocal(this.tip);
-      const speed = this.tip.distanceTo(this.prevTip[h]) / Math.max(rawDt, 0.001);
+      // Hand poses update less often than frames render: smooth the speed.
+      const raw = this.tip.distanceTo(this.prevTip[h]) / Math.max(rawDt, 0.001);
+      this.speed[h] += (Math.min(raw, 4) - this.speed[h]) * 0.4;
+      const speed = this.speed[h];
       this.prevTip[h].copy(this.tip);
       for (let id = 0; id < this.pads.length; id++) {
         const pad = this.pads[id];
@@ -248,9 +252,6 @@ export class DrumSystem extends createSystem({
         const k = h * KIT.length + id;
         if (this.local.y > 0.05 || radial > r + 0.035) this.armed[k] = 1;
         else if (this.armed[k] && radial < r + 0.008 && this.local.y < 0.028 && this.local.y > -0.05) {
-          // An impossible speed is a tracking jump: wait a frame for a real
-          // reading instead of swallowing the hit.
-          if (speed >= 6) continue;
           this.armed[k] = 0;
           this.strike(id, Math.min(1, Math.max(0.35, speed / 1.0)));
         }

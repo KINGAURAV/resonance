@@ -24,7 +24,7 @@ import { resetResonator } from './resonators.js';
 
 interface PebbleState {
   action: string;
-  mode: 'playground' | 'drums';
+  mode: PebbleMode;
   object: Group;
   mat: MeshStandardMaterial;
   label: Label;
@@ -36,7 +36,8 @@ const HINTS = ['Touch to create sound', 'Grab. Stretch. Pluck.', 'Create your rh
 
 // Left column = performance, right column = composition.
 // [action, label, side, grid cell, mode it belongs to]
-const PEBBLES: [string, string, number, number, 'playground' | 'drums'][] = [
+type PebbleMode = 'playground' | 'drums' | 'guitar' | 'studio'; // studio = any instrument
+const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['play', 'Pause', -1, 0, 'playground'],
   ['beat', 'Beat', -1, 1, 'playground'],
   ['slower', 'Slower', -1, 2, 'playground'],
@@ -46,8 +47,10 @@ const PEBBLES: [string, string, number, number, 'playground' | 'drums'][] = [
   ['clear', 'Reset', 1, 2, 'playground'],
   ['intro', 'Skip intro', 1, 3, 'playground'],
   ['drums', 'Drums', 1, 4, 'playground'],
+  ['guitar', 'Guitar', 1, 5, 'playground'],
   ['learn', 'Learn a beat', 1, 4, 'drums'],
-  ['playground', 'Playground', 1, 5, 'drums'],
+  ['learnGuitar', 'Learn a song', 1, 4, 'guitar'],
+  ['playground', 'Playground', 1, 5, 'studio'],
 ];
 
 export class UISystem extends createSystem({
@@ -64,7 +67,7 @@ export class UISystem extends createSystem({
     for (const [action, text, side, row, mode] of PEBBLES) {
       const object = new Group();
       object.name = `Pebble ${action}`;
-      const color = action === 'drums' || mode === 'drums' ? COLORS.gold : side < 0 ? COLORS.cyan : COLORS.violet;
+      const color = mode !== 'playground' || action === 'drums' || action === 'guitar' ? COLORS.gold : side < 0 ? COLORS.cyan : COLORS.violet;
       const mat = new MeshStandardMaterial({
         color, emissive: color, emissiveIntensity: 0.5,
         transparent: true, opacity: 0.85, roughness: 0.2, metalness: 0.2,
@@ -173,7 +176,7 @@ export class UISystem extends createSystem({
       setShown(r.object, r.shown);
     });
     for (const p of this.pebbles) {
-      const inMode = p.mode === stage.mode;
+      const inMode = p.mode === stage.mode || (p.mode === 'studio' && !play);
       setShown(p.object, inMode && (!play || step >= 3 || p.action === 'intro'));
       if (p.action === 'intro') p.label.set(step >= 3 ? 'Replay intro' : 'Skip intro');
     }
@@ -215,6 +218,10 @@ export class UISystem extends createSystem({
       case 'drums':
         stage.setMode('drums');
         stage.toast('Drum kit: hit the pads');
+        break;
+      case 'guitar':
+        stage.setMode('guitar');
+        stage.toast('Touch a chord, then strum');
         break;
       case 'playground':
         stage.setMode('playground');

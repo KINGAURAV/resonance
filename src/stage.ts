@@ -6,6 +6,8 @@ import { Group, Vector3, type Entity, type Object3D } from '@iwsdk/core';
 import type { VoiceKind } from './audio/engine.js';
 import type { Label } from './visuals/textures.js';
 
+export type StudioMode = 'playground' | 'drums' | 'guitar';
+
 export const COLORS = {
   cyan: 0x35e0ff,
   violet: 0x8a5cff,
@@ -56,7 +58,7 @@ export const stage = {
   /** Slot -> resonator id, or -1. */
   slots: new Int8Array(LAYOUT.steps * LAYOUT.ringRadii.length).fill(-1),
   /** Which instrument space is showing. */
-  mode: 'playground' as 'playground' | 'drums',
+  mode: 'playground' as StudioMode,
   playing: true,
   /** Built-in drum groove synced to the sequencer. */
   beat: false,
@@ -75,7 +77,7 @@ export const stage = {
   /** Extra pebble actions registered by other systems (action -> handler). */
   actions: {} as Record<string, () => void>,
   setPebbleLabel: (_action: string, _text: string) => {},
-  setMode: (_mode: 'playground' | 'drums') => {},
+  setMode: (_mode: StudioMode) => {},
 };
 
 /** Root-local position of a sequencer slot. */

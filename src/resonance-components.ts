@@ -22,3 +22,11 @@ export const StringBody = createComponent('StringBody', {});
 export const DrumPad = createComponent('DrumPad', {
   id: { type: Types.Int8, default: 0 },
 });
+
+/** A chord block on the guitar neck. `id` indexes the chord list. */
+export const GuitarChord = createComponent('GuitarChord', {
+  id: { type: Types.Int8, default: 0 },
+});
+
+/** Invisible strum area so a mouse or far pinch can strum too. */
+export const GuitarStrum = createComponent('GuitarStrum', {});
