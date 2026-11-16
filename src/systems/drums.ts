@@ -9,8 +9,10 @@
 import {
   AdditiveBlending,
   createSystem,
-  CylinderGeometry,
+  Grabbed,
   Group,
+  OneHandGrabbable,
+  type Entity,
   Mesh,
   MeshStandardMaterial,
   Pressed,
@@ -25,7 +27,7 @@ import {
 } from '@iwsdk/core';
 import { audio, type VoiceKind } from '../audio/engine.js';
 import { DrumPad } from '../resonance-components.js';
-import { COLORS, setShown, stage, trace } from '../stage.js';
+import { COLORS, grabOnly, setShown, stage, trace } from '../stage.js';
 import { buildCymbal, buildDrum } from '../visuals/instruments.js';
 import { glowSprite, Label, ringTexture } from '../visuals/textures.js';
 
@@ -46,7 +48,7 @@ const KIT: PadDef[] = [
   { voice: 'crash', name: 'Crash', color: COLORS.magenta, radius: 0.05, pos: [0.27, 0.07, -0.03] },
 ];
 const PAD_TILT = 0.5; // radians: pads lean toward the player
-const SHELL_COLOR = 0x8e1b2e; // wine-red lacquer
+const SHELL_COLOR = 0x16162c; // dark anodised metal
 const DEPTH: Partial<Record<VoiceKind, number>> = { kick: 0.09, snare: 0.045, tom: 0.065 };
 
 // Each lesson is one bar of eighth notes; -1 is a rest. Pad ids index KIT.
@@ -78,6 +80,8 @@ export class DrumSystem extends createSystem({
 }) {
   private kit = new Group();
   private pads: PadState[] = [];
+  private entities: Entity[] = [];
+  private halos: Sprite[] = [];
   private guides: Sprite[] = [];
   private status!: Label;
   private invTilt = new Quaternion();
@@ -111,12 +115,19 @@ export class DrumSystem extends createSystem({
       const mat = model.hitMaterial;
       const label = new Label(def.name, 0.021);
       label.sprite.position.set(0, -0.034, def.radius + 0.022);
-      object.add(model.group, glowSprite(def.color, def.radius * 3, 0.1), label.sprite);
+      const halo = glowSprite(def.color, def.radius * 3.4, 0.3);
+      halo.position.y = 0.004;
+      this.halos.push(halo);
+      object.add(model.group, halo, label.sprite);
       object.position.set(def.pos[0], def.pos[1], def.pos[2]);
       object.rotation.x = PAD_TILT;
       const e = this.world.createTransformEntity(object, { parent: stage.rootEntity! });
       e.addComponent(DrumPad, { id });
-      e.addComponent(RayInteractable); // mouse / far-pinch fallback
+      e.addComponent(RayInteractable); // mouse fallback
+      // Pinch a pad to move it: build the kit that suits your reach. Rotation
+      // is locked so strike detection keeps its known tilt.
+      e.addComponent(OneHandGrabbable, { rotate: false });
+      this.entities.push(e);
       this.pads.push({ def, object, model: model.group, cymbal, mat, pulse: 0, lastHit: -1 });
       setShown(object, false);
     });
@@ -244,6 +255,7 @@ export class DrumSystem extends createSystem({
       this.prevTip[h].copy(this.tip);
       for (let id = 0; id < this.pads.length; id++) {
         const pad = this.pads[id];
+        if (this.entities[id].hasComponent(Grabbed)) continue; // being moved
         this.local.copy(this.tip).sub(pad.object.position).applyQuaternion(this.invTilt);
         const radial = Math.hypot(this.local.x, this.local.z);
         const r = pad.def.radius;
@@ -317,9 +329,13 @@ export class DrumSystem extends createSystem({
     const dt = Math.min(delta, 0.05);
     if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectStrikes(delta);
     if (this.learning) this.updateLesson(dt);
-    for (const pad of this.pads) {
+    for (let id = 0; id < this.pads.length; id++) {
+      const pad = this.pads[id];
+      grabOnly(pad.object);
+      this.halos[id].material.opacity = 0.28 + pad.pulse * 0.7;
+      this.halos[id].scale.setScalar(pad.def.radius * (3.4 + pad.pulse * 2.2));
       pad.pulse = Math.max(0, pad.pulse - dt * (pad.cymbal ? 1.6 : 4));
-      pad.mat.emissiveIntensity = pad.pulse * (pad.cymbal ? 0.9 : 0.7);
+      pad.mat.emissiveIntensity = 0.1 + pad.pulse * (pad.cymbal ? 0.9 : 1.6);
       // Cymbals rock on their stand after a hit; drums stay put.
       if (pad.cymbal) pad.model.rotation.z = Math.sin(time * 34) * pad.pulse * 0.1;
     }

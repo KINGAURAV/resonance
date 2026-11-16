@@ -27,6 +27,10 @@ Competition 2026 — Entertainment track, New Experience division.
 - **Record loop** captures what you play on any instrument (two bars, starting
   on your first note) and loops it; **Add layer** overdubs. The loop keeps
   playing while you switch instruments.
+- Poke **Lattice** for a block of 30 note cubes (five notes x three octaves x
+  two timbres). Touch cubes to play; with **Arp** on, cubes latch and the
+  arpeggiator cycles through them in tempo.
+- Drum pads can be pinched and moved to build your own kit layout.
 
 All sound is synthesized in the browser (Web Audio); nothing is downloaded and
 no network service is used.
@@ -57,6 +61,7 @@ On this machine Node 22 is installed side by side:
 | `src/systems/sequencer.ts` | Orbital sequencer scheduled on the audio clock |
 | `src/systems/drums.ts` | Drum kit, strike detection, learn-a-beat lessons |
 | `src/systems/guitar.ts` | Air guitar: chord blocks, strum detection, learn-a-song lessons |
+| `src/systems/lattice.ts` | Note-cube lattice and arpeggiator |
 | `src/systems/looper.ts` | Cross-instrument loop recorder and overdub |
 | `src/visuals/instruments.ts` | Procedural guitar and drum models |
 | `src/systems/ui.ts` | Control pebbles, guided intro, title overlay |

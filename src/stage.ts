@@ -6,7 +6,7 @@ import { Group, Vector3, type Entity, type Object3D } from '@iwsdk/core';
 import type { VoiceKind } from './audio/engine.js';
 import type { Label } from './visuals/textures.js';
 
-export type StudioMode = 'playground' | 'drums' | 'guitar';
+export type StudioMode = 'playground' | 'drums' | 'guitar' | 'lattice';
 
 export const COLORS = {
   cyan: 0x35e0ff,

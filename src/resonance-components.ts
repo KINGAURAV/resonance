@@ -30,3 +30,8 @@ export const GuitarChord = createComponent('GuitarChord', {
 
 /** Invisible strum area so a mouse or far pinch can strum too. */
 export const GuitarStrum = createComponent('GuitarStrum', {});
+
+/** One note cube in the Lattice. `id` = layer * 15 + row * 5 + column. */
+export const LatticeCell = createComponent('LatticeCell', {
+  id: { type: Types.Int8, default: 0 },
+});

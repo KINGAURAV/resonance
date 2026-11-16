@@ -4,6 +4,7 @@
  * These are pure decoration: hit/strum detection lives in the systems.
  */
 import {
+  AdditiveBlending,
   BoxGeometry,
   CanvasTexture,
   CircleGeometry,
@@ -11,6 +12,7 @@ import {
   ExtrudeGeometry,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   RepeatWrapping,
   Shape,
@@ -181,32 +183,22 @@ export interface DrumModel {
  */
 export function buildDrum(radius: number, depth: number, shellColor: number, glow: number): DrumModel {
   const group = new Group();
+  // Electronic-pad look: a dark rubber head inside a ring of coloured light.
   const skin = new MeshStandardMaterial({
-    color: 0xc9c4b6, roughness: 0.9, emissive: glow, emissiveIntensity: 0,
+    color: 0x0c0c18, roughness: 0.35, metalness: 0.3, emissive: glow, emissiveIntensity: 0.1,
   });
-  const shellMat = new MeshStandardMaterial({ color: shellColor, metalness: 0.55, roughness: 0.28 });
+  const shellMat = new MeshStandardMaterial({ color: shellColor, metalness: 0.75, roughness: 0.3 });
   const metal = chrome();
-  const head = decor(new Mesh(new CylinderGeometry(radius, radius, 0.004, 40), skin));
+  // The head stays clickable so a mouse or pinch-ray can play the pad.
+  const head = new Mesh(new CylinderGeometry(radius, radius, 0.004, 40), skin);
   head.position.y = -0.002;
   const shell = decor(new Mesh(new CylinderGeometry(radius * 0.985, radius * 0.985, depth, 40, 1, true), shellMat));
   shell.position.y = -0.004 - depth / 2;
-  group.add(head, shell);
-  for (const y of [0.001, -0.006 - depth]) {
-    const hoop = decor(new Mesh(new TorusGeometry(radius + 0.0015, 0.0032, 8, 48), metal));
-    hoop.rotation.x = Math.PI / 2;
-    hoop.position.y = y;
-    group.add(hoop);
-  }
-  // Tension lugs around the shell.
-  const lugGeo = new BoxGeometry(0.006, depth * 0.55, 0.005);
-  const lugs = radius > 0.058 ? 8 : 6;
-  for (let i = 0; i < lugs; i++) {
-    const a = (i / lugs) * Math.PI * 2;
-    const lug = decor(new Mesh(lugGeo, metal));
-    lug.position.set(Math.cos(a) * (radius + 0.002), -0.004 - depth / 2, Math.sin(a) * (radius + 0.002));
-    lug.rotation.y = -a + Math.PI / 2;
-    group.add(lug);
-  }
+  group.add(head, shell, neonRing(radius + 0.001, 0.003, glow, 0.002));
+  const hoop = decor(new Mesh(new TorusGeometry(radius + 0.0015, 0.0028, 8, 48), metal));
+  hoop.rotation.x = Math.PI / 2;
+  hoop.position.y = -0.006 - depth;
+  group.add(hoop);
   group.add(stand(-0.006 - depth, 0.16, metal));
   return { group, hitMaterial: skin, cymbal: false };
 }
@@ -215,24 +207,36 @@ export function buildDrum(radius: number, depth: number, shellColor: number, glo
 export function buildCymbal(radius: number, pair: boolean, glow: number): DrumModel {
   const group = new Group();
   const brass = new MeshStandardMaterial({
-    color: 0xd9ab45, metalness: 1, roughness: 0.3, emissive: glow, emissiveIntensity: 0,
+    color: 0xd9ab45, metalness: 1, roughness: 0.3, emissive: glow, emissiveIntensity: 0.05,
   });
   const metal = chrome();
   // A very shallow cone reads as a cymbal bow; a small dome is the bell.
-  const bow = () => decor(new Mesh(new CylinderGeometry(radius * 0.2, radius, 0.007, 48), brass));
-  const top = bow();
+  const top = new Mesh(new CylinderGeometry(radius * 0.2, radius, 0.007, 48), brass); // clickable
   top.position.y = -0.0035;
   const bell = decor(new Mesh(new CylinderGeometry(radius * 0.08, radius * 0.22, 0.007, 24), brass));
   bell.position.y = 0.0035;
-  group.add(top, bell);
+  group.add(top, bell, neonRing(radius, 0.002, glow, -0.006));
   if (pair) {
-    const bottom = bow();
+    const bottom = decor(new Mesh(new CylinderGeometry(radius * 0.2, radius, 0.007, 48), brass));
     bottom.rotation.x = Math.PI; // mirrored underneath: a closed hi-hat
     bottom.position.y = -0.0125;
     group.add(bottom);
   }
   group.add(stand(pair ? -0.016 : -0.007, 0.22, metal));
   return { group, hitMaterial: brass, cymbal: true };
+}
+
+/** A flat ring of pure light (additive, so it reads as glowing). */
+function neonRing(radius: number, tube: number, color: number, y: number): Mesh {
+  const ring = decor(
+    new Mesh(
+      new TorusGeometry(radius, tube, 8, 56),
+      new MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false }),
+    ),
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = y;
+  return ring;
 }
 
 function stand(top: number, length: number, metal: Material): Mesh {

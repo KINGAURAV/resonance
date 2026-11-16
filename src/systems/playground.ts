@@ -6,6 +6,7 @@
 import {
   AdditiveBlending,
   BufferAttribute,
+  BoxGeometry,
   BufferGeometry,
   CanvasTexture,
   CircleGeometry,
@@ -41,6 +42,7 @@ const DUST = 320;
 const WAVE_POINTS = 96;
 const TICKS = 32;
 const CRYSTALS = 9;
+const PYLONS = 10;
 
 export class PlaygroundSystem extends createSystem({}) {
   private headPos = new Vector3();
@@ -59,6 +61,7 @@ export class PlaygroundSystem extends createSystem({}) {
   private floorRings: Mesh[] = [];
   private ticks: Mesh[] = [];
   private crystals: Mesh[] = [];
+  private pylons: Mesh[] = [];
   private aurora: Mesh[] = [];
   private dust!: Points;
   private dustMat!: PointsMaterial;
@@ -210,6 +213,26 @@ export class PlaygroundSystem extends createSystem({}) {
       ring.position.y = 0.003;
       this.floorRings.push(ring);
     }
+    // A wide faint twin under each ring fakes the bloom of a neon tube.
+    for (const [r, c] of ringDefs) {
+      const bloom = flat(new Mesh(new RingGeometry(r - 0.07, r + 0.07, 96), glow(c, 0.1)));
+      bloom.position.y = 0.002;
+    }
+    // Light pylons around the stage: each one is driven by a frequency band.
+    const pylonGeo = new BoxGeometry(0.05, 1, 0.05);
+    const pylonColors = [COLORS.cyan, COLORS.magenta, COLORS.violet, COLORS.mint];
+    for (let i = 0; i < PYLONS; i++) {
+      const a = ((i + 0.5) / PYLONS) * Math.PI * 2;
+      const p = new Mesh(pylonGeo, glow(pylonColors[i % 4], 0.8));
+      p.position.set(Math.sin(a) * 2.5, 0.5, Math.cos(a) * 2.5);
+      p.raycast = () => {};
+      const cap = glowSprite(pylonColors[i % 4], 0.9, 0.35);
+      cap.position.y = 0.5; // sits on top of the bar (in the bar's unit space)
+      p.add(cap);
+      stage3d.add(p);
+      this.pylons.push(p);
+    }
+
     // 32 ticks around the floor act as a circular level meter.
     const tickGeo = new PlaneGeometry(0.03, 0.14);
     for (let i = 0; i < TICKS; i++) {
@@ -450,6 +473,15 @@ export class PlaygroundSystem extends createSystem({}) {
     for (let i = 0; i < TICKS; i++) {
       const d = Math.min(i, TICKS - i);
       (this.ticks[i].material as MeshBasicMaterial).opacity = d < lit ? 0.95 : 0.14;
+    }
+    for (let i = 0; i < this.pylons.length; i++) {
+      // Bars rise and fall like a graphic equaliser wrapped around you.
+      const band = i % 3 === 0 ? bass : i % 3 === 1 ? mid : high;
+      const p = this.pylons[i];
+      const h = 0.5 + band * 2.4 + Math.sin(time * 0.7 + i) * 0.06;
+      p.scale.y += (h - p.scale.y) * 0.25;
+      p.position.y = p.scale.y / 2;
+      (p.material as MeshBasicMaterial).opacity = 0.45 + band * 0.55;
     }
     for (let i = 0; i < this.crystals.length; i++) {
       const c = this.crystals[i];
