@@ -7,7 +7,15 @@ import {
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
+  CanvasTexture,
+  CircleGeometry,
   Color,
+  CylinderGeometry,
+  DoubleSide,
+  MeshStandardMaterial,
+  OctahedronGeometry,
+  PlaneGeometry,
+  RingGeometry,
   createSystem,
   DirectionalLight,
   Group,
@@ -31,6 +39,8 @@ const RIPPLES = 14;
 const SPARKS = 240;
 const DUST = 320;
 const WAVE_POINTS = 96;
+const TICKS = 32;
+const CRYSTALS = 9;
 
 export class PlaygroundSystem extends createSystem({}) {
   private headPos = new Vector3();
@@ -45,6 +55,11 @@ export class PlaygroundSystem extends createSystem({}) {
   private coreGlow!: Sprite;
   private coreAura!: Sprite;
   private wave!: LineLoop;
+  private stageGroup = new Group();
+  private floorRings: Mesh[] = [];
+  private ticks: Mesh[] = [];
+  private crystals: Mesh[] = [];
+  private aurora: Mesh[] = [];
   private dust!: Points;
   private dustMat!: PointsMaterial;
 
@@ -78,6 +93,7 @@ export class PlaygroundSystem extends createSystem({}) {
     root.add(key, key.target);
 
     this.buildCore(root);
+    this.buildStage(root);
     this.buildDust(root);
     this.buildFx(root);
 
@@ -163,6 +179,98 @@ export class PlaygroundSystem extends createSystem({}) {
       const n = glowSprite(c, s, 0.1);
       n.position.set(x, y, z);
       root.add(n);
+    }
+  }
+
+  /**
+   * The stage: a dark glass floor with glowing rings under the player, a
+   * ring of level-meter ticks, drifting crystal monoliths and aurora bands
+   * on the horizon. Everything here listens to the music.
+   */
+  private buildStage(root: Group): void {
+    const stage3d = this.stageGroup;
+    stage3d.name = 'Stage';
+    stage3d.position.set(0, -0.8, LAYOUT.forward); // re-seated in update()
+    root.add(stage3d);
+    const flat = (m: Mesh) => {
+      m.rotation.x = -Math.PI / 2;
+      m.raycast = () => {};
+      stage3d.add(m);
+      return m;
+    };
+    flat(new Mesh(
+      new CircleGeometry(1.7, 64),
+      new MeshStandardMaterial({ color: 0x070818, roughness: 0.3, metalness: 0.7 }),
+    ));
+    const glow = (color: number, opacity: number) =>
+      new MeshBasicMaterial({ color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false });
+    const ringDefs: [number, number][] = [[0.62, COLORS.cyan], [1.08, COLORS.violet], [1.66, COLORS.magenta]];
+    for (const [r, c] of ringDefs) {
+      const ring = flat(new Mesh(new RingGeometry(r - 0.008, r + 0.008, 96), glow(c, 0.7)));
+      ring.position.y = 0.003;
+      this.floorRings.push(ring);
+    }
+    // 32 ticks around the floor act as a circular level meter.
+    const tickGeo = new PlaneGeometry(0.03, 0.14);
+    for (let i = 0; i < TICKS; i++) {
+      const a = (i / TICKS) * Math.PI * 2;
+      const tick = new Mesh(tickGeo, glow(i % 2 ? COLORS.cyan : COLORS.violet, 0.2));
+      tick.position.set(Math.sin(a) * 1.36, 0.004, Math.cos(a) * 1.36);
+      tick.rotation.order = 'YXZ'; // spin around the floor, then lie flat
+      tick.rotation.set(-Math.PI / 2, a, 0);
+      tick.raycast = () => {};
+      stage3d.add(tick);
+      this.ticks.push(tick);
+    }
+
+    // Crystal monoliths drifting in the distance.
+    const crystalGeo = new OctahedronGeometry(1, 0);
+    const palette = [COLORS.cyan, COLORS.violet, COLORS.magenta, COLORS.gold];
+    for (let i = 0; i < CRYSTALS; i++) {
+      const a = (i / CRYSTALS) * Math.PI * 2 + 0.4;
+      const dist = 4.5 + ((i * 37) % 10) * 0.45;
+      const c = new Mesh(crystalGeo, new MeshBasicMaterial({
+        color: palette[i % palette.length], wireframe: true, transparent: true, opacity: 0.5,
+        blending: AdditiveBlending, depthWrite: false,
+      }));
+      const w = 0.25 + ((i * 13) % 5) * 0.09;
+      c.scale.set(w, w * (2.2 + (i % 3)), w);
+      c.position.set(Math.sin(a) * dist, 0.8 + ((i * 7) % 6) * 0.55, Math.cos(a) * dist);
+      c.raycast = () => {};
+      stage3d.add(c);
+      this.crystals.push(c);
+    }
+
+    // Aurora: tall curved bands with a soft vertical gradient.
+    const grad = document.createElement('canvas');
+    grad.width = 64;
+    grad.height = 128;
+    const g2 = grad.getContext('2d')!;
+    // Fade out toward every edge so the bands have no hard outline.
+    const img = g2.createImageData(64, 128);
+    for (let y = 0; y < 128; y++) {
+      for (let x = 0; x < 64; x++) {
+        const v = Math.sin((y / 127) * Math.PI) ** 1.5 * Math.sin((x / 63) * Math.PI) ** 1.2;
+        const k = (y * 64 + x) * 4;
+        img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+        img.data[k + 3] = Math.round(v * 150);
+      }
+    }
+    g2.putImageData(img, 0, 0);
+    const auroraMap = new CanvasTexture(grad);
+    const bands: [number, number, number][] = [[COLORS.mint, 0.3, 1.3], [COLORS.violet, 2.4, 1.6], [COLORS.cyan, 4.3, 1.1]];
+    for (const [color, start, arc] of bands) {
+      const band = new Mesh(
+        new CylinderGeometry(11, 11, 5, 24, 1, true, start, arc),
+        new MeshBasicMaterial({
+          map: auroraMap, color, transparent: true, opacity: 0.2, side: DoubleSide,
+          blending: AdditiveBlending, depthWrite: false,
+        }),
+      );
+      band.position.y = 3.2;
+      band.raycast = () => {};
+      stage3d.add(band);
+      this.aurora.push(band);
     }
   }
 
@@ -330,6 +438,30 @@ export class PlaygroundSystem extends createSystem({}) {
       arr[i * 3 + 2] = Math.cos(a) * r;
     }
     wp.needsUpdate = true;
+
+    // Stage: keep the floor on the real floor (the root rides at seat height).
+    this.stageGroup.position.y = -stage.root.position.y;
+    for (let i = 0; i < this.floorRings.length; i++) {
+      const band = i === 0 ? bass : i === 1 ? mid : high;
+      (this.floorRings[i].material as MeshBasicMaterial).opacity = 0.35 + band * 0.65;
+      this.floorRings[i].scale.setScalar(1 + (i === 0 ? bass * 0.05 : 0));
+    }
+    const lit = level * TICKS * 0.5; // the meter fills symmetrically from the front
+    for (let i = 0; i < TICKS; i++) {
+      const d = Math.min(i, TICKS - i);
+      (this.ticks[i].material as MeshBasicMaterial).opacity = d < lit ? 0.95 : 0.14;
+    }
+    for (let i = 0; i < this.crystals.length; i++) {
+      const c = this.crystals[i];
+      c.rotation.y += dt * (0.08 + (i % 3) * 0.04 + mid * 0.6);
+      c.position.y += Math.sin(time * 0.3 + i * 1.9) * dt * 0.05;
+      (c.material as MeshBasicMaterial).opacity = 0.28 + (i % 2 ? high : bass) * 0.7;
+    }
+    for (let i = 0; i < this.aurora.length; i++) {
+      const a = this.aurora[i];
+      a.rotation.y += dt * 0.012 * (i % 2 ? -1 : 1);
+      (a.material as MeshBasicMaterial).opacity = 0.22 + mid * 0.4 + Math.sin(time * 0.25 + i * 2) * 0.03;
+    }
 
     // Dust: bass stirs it, highs make it sparkle.
     this.dust.rotation.y += dt * (0.015 + bass * 0.35);

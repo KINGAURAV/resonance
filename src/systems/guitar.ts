@@ -197,7 +197,7 @@ export class GuitarSystem extends createSystem({
       this.guitar.getWorldPosition(this.worldPos);
       audio.play('pluck', midiFreq(midi), {
         // Kept quiet and dark on purpose: six strings ring at once.
-        when, velocity: velocity * 0.45, brightness: 0.25,
+        when, velocity: velocity * 0.45, brightness: 0.25, live: true,
         x: this.worldPos.x, y: this.worldPos.y, z: this.worldPos.z,
       });
     }

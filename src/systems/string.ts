@@ -162,6 +162,7 @@ export class StringSystem extends createSystem({
     stage.root.localToWorld(this.point);
     audio.play('pluck', noteFreq(this.note), {
       velocity: strength,
+      live: true,
       brightness: 0.3 + Math.abs(s - 0.5) * 1.3,
       x: this.point.x, y: this.point.y, z: this.point.z,
     });

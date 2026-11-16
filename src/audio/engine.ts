@@ -35,6 +35,8 @@ export interface PlayOptions {
   z?: number;
   /** Pluck only: 0 (dark) .. 1 (bright). */
   brightness?: number;
+  /** True when a person just played this note (the looper records these). */
+  live?: boolean;
 }
 
 const MAX_VOICES = 28;
@@ -55,6 +57,8 @@ export class AudioEngine {
   private noise!: AudioBuffer;
   private spectrum = new Uint8Array(256);
   private activeVoices = 0;
+  /** Called for every live (hand-played) note; used by the looper. */
+  onLive: ((kind: VoiceKind, freq: number, opts: PlayOptions, time: number) => void) | null = null;
 
   /** Must be called from a user gesture (click, pinch, entering XR). */
   start(): void {
@@ -168,6 +172,7 @@ export class AudioEngine {
     if (!ctx || this.activeVoices >= MAX_VOICES) return;
     const t = Math.max(opts.when ?? 0, ctx.currentTime + 0.003);
     const vel = Math.min(1, Math.max(0.05, opts.velocity ?? 0.8));
+    if (opts.live && this.onLive) this.onLive(kind, freq, opts, t);
 
     const out = ctx.createGain();
     out.gain.value = vel;

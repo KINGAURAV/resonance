@@ -67,9 +67,9 @@ export function flashResonator(r: ResonatorState, strength = 1): void {
 }
 
 /** Sound only, at an exact audio-clock time (used by the sequencer). */
-export function soundResonator(r: ResonatorState, when = 0, velocity = 0.85): void {
+export function soundResonator(r: ResonatorState, when = 0, velocity = 0.85, live = false): void {
   r.object.getWorldPosition(tmp);
-  audio.play(r.kind, noteFreq(r.note), { when, velocity, x: tmp.x, y: tmp.y, z: tmp.z });
+  audio.play(r.kind, noteFreq(r.note), { when, velocity, live, x: tmp.x, y: tmp.y, z: tmp.z });
 }
 
 export function setNote(r: ResonatorState, note: number): void {
@@ -176,7 +176,7 @@ export class ResonatorSystem extends createSystem({
     if (!r.shown || now - r.lastHit < RETRIGGER_SECONDS) return; // debounce
     r.lastHit = now;
     audio.start();
-    soundResonator(r, 0, velocity);
+    soundResonator(r, 0, velocity, true);
     flashResonator(r, 0.5 + velocity * 0.5);
     trace('strike', r.kind, r.note, velocity.toFixed(2), 'audio', audio.running);
     stage.onNote(r.id);

@@ -36,7 +36,7 @@ const HINTS = ['Touch to create sound', 'Grab. Stretch. Pluck.', 'Create your rh
 
 // Left column = performance, right column = composition.
 // [action, label, side, grid cell, mode it belongs to]
-type PebbleMode = 'playground' | 'drums' | 'guitar' | 'studio'; // studio = any instrument
+type PebbleMode = 'playground' | 'drums' | 'guitar' | 'studio' | 'all'; // studio = any instrument
 const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['play', 'Pause', -1, 0, 'playground'],
   ['beat', 'Beat', -1, 1, 'playground'],
@@ -50,6 +50,8 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['guitar', 'Guitar', 1, 5, 'playground'],
   ['learn', 'Learn a beat', 1, 4, 'drums'],
   ['learnGuitar', 'Learn a song', 1, 4, 'guitar'],
+  ['loop', 'Record loop', -1, 4, 'all'],
+  ['loopClear', 'Clear loop', -1, 5, 'all'],
   ['playground', 'Playground', 1, 5, 'studio'],
 ];
 
@@ -67,7 +69,7 @@ export class UISystem extends createSystem({
     for (const [action, text, side, row, mode] of PEBBLES) {
       const object = new Group();
       object.name = `Pebble ${action}`;
-      const color = mode !== 'playground' || action === 'drums' || action === 'guitar' ? COLORS.gold : side < 0 ? COLORS.cyan : COLORS.violet;
+      const color = mode === 'all' ? 0xff5a6e : mode !== 'playground' || action === 'drums' || action === 'guitar' ? COLORS.gold : side < 0 ? COLORS.cyan : COLORS.violet;
       const mat = new MeshStandardMaterial({
         color, emissive: color, emissiveIntensity: 0.5,
         transparent: true, opacity: 0.85, roughness: 0.2, metalness: 0.2,
@@ -176,7 +178,7 @@ export class UISystem extends createSystem({
       setShown(r.object, r.shown);
     });
     for (const p of this.pebbles) {
-      const inMode = p.mode === stage.mode || (p.mode === 'studio' && !play);
+      const inMode = p.mode === stage.mode || p.mode === 'all' || (p.mode === 'studio' && !play);
       setShown(p.object, inMode && (!play || step >= 3 || p.action === 'intro'));
       if (p.action === 'intro') p.label.set(step >= 3 ? 'Replay intro' : 'Skip intro');
     }

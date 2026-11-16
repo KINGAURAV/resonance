@@ -201,7 +201,7 @@ export class DrumSystem extends createSystem({
     const p = pad.object.position;
     this.local.copy(p);
     stage.root.localToWorld(this.local);
-    audio.play(pad.def.voice, 0, { velocity, x: this.local.x, y: this.local.y, z: this.local.z });
+    audio.play(pad.def.voice, 0, { velocity, live: true, x: this.local.x, y: this.local.y, z: this.local.z });
     pad.pulse = 1;
     let judged = '';
     if (this.learning && this.resumeIn < 0) judged = this.judge(id) ? 'hit' : 'stray';
