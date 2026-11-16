@@ -27,7 +27,7 @@ import {
 import { audio } from '../audio/engine.js';
 import { noteFreq } from '../audio/scale.js';
 import { LatticeCell } from '../resonance-components.js';
-import { COLORS, setShown, stage, trace } from '../stage.js';
+import { COLORS, fxAt, setShown, stage, trace } from '../stage.js';
 import { Label } from '../visuals/textures.js';
 
 const COLS = 5;
@@ -65,7 +65,7 @@ export class LatticeSystem extends createSystem({
     const g = this.group;
     g.name = 'Lattice';
     g.position.set(0, 0.13, 0.15);
-    const entity = this.world.createTransformEntity(g, { parent: stage.rootEntity! });
+    const entity = this.world.createTransformEntity(g, { parent: stage.stationEntities.lattice });
 
     const box = new BoxGeometry(SIZE, SIZE, SIZE);
     const edge = new EdgesGeometry(box);
@@ -151,7 +151,7 @@ export class LatticeSystem extends createSystem({
     }
     const c = this.cubes[id].position;
     const p = this.group.position;
-    stage.ripple(p.x + c.x, p.y + c.y, p.z + c.z, NOTE_COLORS[id % COLS], 0.12);
+    fxAt(stage.stations.lattice, p.x + c.x, p.y + c.y, p.z + c.z, NOTE_COLORS[id % COLS], 0.12, 0);
   }
 
   private detectHands(rawDt: number): void {
@@ -217,7 +217,8 @@ export class LatticeSystem extends createSystem({
   }
 
   update(delta: number): void {
-    const visible = stage.mode === 'lattice';
+    const active = stage.mode === 'lattice';
+    const visible = active || stage.showAll;
     if (this.group.visible !== visible) {
       setShown(this.group, visible);
       if (visible) this.status.set(this.arp ? 'Arp on: tap cubes to add notes' : 'Touch the cubes');
@@ -227,7 +228,7 @@ export class LatticeSystem extends createSystem({
     if (this.arp && audio.running) this.runArp();
     if (!visible) return;
     const dt = Math.min(delta, 0.05);
-    if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectHands(delta);
+    if (active && this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectHands(delta);
     for (let id = 0; id < CELLS; id++) {
       this.flash[id] = Math.max(0, this.flash[id] - dt * 3);
       const held = id === this.handCell[0] || id === this.handCell[1];

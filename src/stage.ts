@@ -53,6 +53,16 @@ export interface ResonatorState {
 
 export const stage = {
   root: new Group(),
+  /** One pivot per instrument, fanned out around the player's seat. */
+  stations: {} as Record<StudioMode, Group>,
+  stationEntities: {} as Record<StudioMode, Entity>,
+  /** Pebbles ride on this pivot, which swings to the active station. */
+  uiStation: new Group(),
+  uiEntity: null as Entity | null,
+  /** True in VR once the intro is done: every instrument is visible at once. */
+  showAll: false,
+  /** Desktop preview only: the arc is spun so the active station faces you. */
+  carousel: 0,
   rootEntity: null as Entity | null,
   resonators: [] as ResonatorState[],
   /** Slot -> resonator id, or -1. */
@@ -115,4 +125,40 @@ export function grabOnly(obj: Object3D): void {
 /** Development-only event trace (stripped from production builds). */
 export function trace(...args: unknown[]): void {
   if (import.meta.env.DEV) console.log('[resonance]', ...args);
+}
+
+export const MODES: StudioMode[] = ['playground', 'drums', 'guitar', 'lattice', 'glide'];
+
+/** Where each instrument sits around the seat (radians; positive = left). */
+export const STATION_ANGLE: Record<StudioMode, number> = {
+  playground: 0,
+  // Spaced by each instrument's width so neighbours never overlap.
+  drums: 1.15,
+  guitar: -1.25,
+  lattice: 2.05,
+  glide: -2.4,
+};
+
+export const STATION_NAME: Record<StudioMode, string> = {
+  playground: 'Playground',
+  drums: 'Drums',
+  guitar: 'Guitar',
+  lattice: 'Lattice',
+  glide: 'Glide synth',
+};
+
+/** Swing a pivot around the player's seat (which is LAYOUT.forward behind the root). */
+export function placeStation(g: Group, angle: number): void {
+  const f = LAYOUT.forward;
+  g.rotation.y = angle;
+  g.position.set(-f * Math.sin(angle), 0, f - f * Math.cos(angle));
+}
+
+const fxTmp = new Vector3();
+/** Ripple + sparks at a position given in a station's own coordinates. */
+export function fxAt(station: Group, x: number, y: number, z: number, color: number, ripple: number, sparks: number): void {
+  station.updateMatrix();
+  fxTmp.set(x, y, z).applyMatrix4(station.matrix);
+  if (ripple > 0) stage.ripple(fxTmp.x, fxTmp.y, fxTmp.z, color, ripple);
+  if (sparks > 0) stage.burst(fxTmp.x, fxTmp.y, fxTmp.z, color, sparks);
 }

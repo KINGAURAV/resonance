@@ -13,12 +13,13 @@ import {
   Pressed,
   RayInteractable,
   SphereGeometry,
+  Vector3,
   VisibilityState,
 } from '@iwsdk/core';
 import { audio } from '../audio/engine.js';
 import { loadComposition, saveComposition } from '../composition.js';
 import { Pebble } from '../resonance-components.js';
-import { COLORS, setShown, stage, trace } from '../stage.js';
+import { COLORS, MODES, setShown, stage, STATION_ANGLE, STATION_NAME, trace, type StudioMode } from '../stage.js';
 import { glowSprite, Label } from '../visuals/textures.js';
 import { resetResonator } from './resonators.js';
 
@@ -31,6 +32,8 @@ interface PebbleState {
   pulse: number;
 }
 
+// Stations from left to right, for the desktop arrow pebbles.
+const ARC: StudioMode[] = ['lattice', 'drums', 'playground', 'guitar', 'glide'];
 const DONE_KEY = 'resonance.introDone';
 const HINTS = ['Touch to create sound', 'Grab. Stretch. Pluck.', 'Create your rhythm: drop a shape on an orbit', ''];
 
@@ -46,18 +49,15 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['load', 'Load', 1, 1, 'playground'],
   ['clear', 'Reset', 1, 2, 'playground'],
   ['intro', 'Skip intro', 1, 3, 'playground'],
-  ['drums', 'Drums', 1, 4, 'playground'],
-  ['guitar', 'Guitar', 1, 5, 'playground'],
-  ['lattice', 'Lattice', 1, 6, 'playground'],
-  ['glide', 'Glide synth', 1, 7, 'playground'],
   ['glideChord', 'Chords: off', 1, 4, 'glide'],
   ['arp', 'Arp: off', 1, 4, 'lattice'],
   ['arpClear', 'Clear notes', 1, 2, 'lattice'],
   ['learn', 'Learn a beat', 1, 4, 'drums'],
   ['learnGuitar', 'Learn a song', 1, 4, 'guitar'],
+  ['prev', '< Instrument', -1, 6, 'all'],
+  ['next', 'Instrument >', 1, 6, 'all'],
   ['loop', 'Record loop', -1, 4, 'all'],
   ['loopClear', 'Clear loop', -1, 5, 'all'],
-  ['playground', 'Playground', 1, 5, 'studio'],
 ];
 
 export class UISystem extends createSystem({
@@ -68,6 +68,8 @@ export class UISystem extends createSystem({
   private hintAlpha = 0;
   private advanceIn = -1; // seconds until the tutorial moves on
   private lastPress = 0;
+  private wasImmersive = false;
+  private look = new Vector3();
 
   init(): void {
     const geo = new SphereGeometry(0.017, 20, 14);
@@ -91,7 +93,7 @@ export class UISystem extends createSystem({
         0.02 + Math.floor(row / 2) * 0.075,
         0.1,
       );
-      const e = this.world.createTransformEntity(object, { parent: stage.rootEntity! });
+      const e = this.world.createTransformEntity(object, { parent: stage.uiEntity! });
       e.addComponent(Pebble, { action });
       e.addComponent(RayInteractable);
       e.addComponent(PokeInteractable);
@@ -169,7 +171,7 @@ export class UISystem extends createSystem({
       } catch {
         /* ignore */
       }
-      stage.toast('The playground is yours');
+      stage.toast('Turn your head to find more instruments');
     }
   }
 
@@ -178,13 +180,16 @@ export class UISystem extends createSystem({
     const step = stage.tutorialStep;
     const play = stage.mode === 'playground';
     // Reveal things progressively so there is only ever one new idea.
+    const immersive = this.world.visibilityState.peek() !== VisibilityState.NonImmersive;
     stage.resonators.forEach((r, i) => {
-      r.shown = play && (step >= 2 || i === 0);
+      r.shown = (play || stage.showAll) && (step >= 2 || i === 0);
       setShown(r.object, r.shown);
     });
     for (const p of this.pebbles) {
       const inMode = p.mode === stage.mode || p.mode === 'all' || (p.mode === 'studio' && !play);
-      setShown(p.object, inMode && (!play || step >= 3 || p.action === 'intro'));
+      // Arrow pebbles replace head-turning in the flat desktop preview.
+      const arrow = p.action === 'prev' || p.action === 'next';
+      setShown(p.object, arrow ? !immersive && step >= 3 : inMode && (!play || step >= 3 || p.action === 'intro'));
       if (p.action === 'intro') p.label.set(step >= 3 ? 'Replay intro' : 'Skip intro');
     }
   }
@@ -222,25 +227,13 @@ export class UISystem extends createSystem({
         stage.stringEnds[1].set(0.13, 0.02, 0.25);
         stage.toast('Reset');
         break;
-      case 'drums':
-        stage.setMode('drums');
-        stage.toast('Drum kit: hit the pads');
+      case 'prev':
+      case 'next': {
+        const i = ARC.indexOf(stage.mode) + (action === 'next' ? 1 : -1);
+        stage.setMode(ARC[(i + ARC.length) % ARC.length]);
+        stage.toast(STATION_NAME[stage.mode]);
         break;
-      case 'guitar':
-        stage.setMode('guitar');
-        stage.toast('Touch a chord, then strum');
-        break;
-      case 'lattice':
-        stage.setMode('lattice');
-        stage.toast('Reach in and touch the cubes');
-        break;
-      case 'glide':
-        stage.setMode('glide');
-        stage.toast('Pinch to play. Move to change the note');
-        break;
-      case 'playground':
-        stage.setMode('playground');
-        break;
+      }
       default:
         stage.actions[action]?.();
         break;
@@ -255,8 +248,41 @@ export class UISystem extends createSystem({
     }
   }
 
+  /** In VR the instrument you turn to face becomes the active one. */
+  private followHead(): void {
+    this.player.head.getWorldDirection(this.look);
+    // getWorldDirection is the head's +Z; the view looks the other way.
+    // Undo the playground's own yaw to get the angle around the seat.
+    const ry = stage.root.rotation.y;
+    const x = -this.look.x * Math.cos(ry) + this.look.z * Math.sin(ry);
+    const z = -this.look.x * Math.sin(ry) - this.look.z * Math.cos(ry);
+    const yaw = Math.atan2(-x, -z);
+    let best = stage.mode;
+    let bestDiff = 10;
+    for (const mode of MODES) {
+      const d = Math.abs(Math.atan2(Math.sin(yaw - STATION_ANGLE[mode]), Math.cos(yaw - STATION_ANGLE[mode])));
+      if (d < bestDiff) {
+        bestDiff = d;
+        best = mode;
+      }
+    }
+    // Switch only once clearly facing the next one, so it never flickers.
+    if (best !== stage.mode && bestDiff < 0.38) {
+      stage.setMode(best);
+      trace('facing', best);
+    }
+  }
+
   update(delta: number, time: number): void {
     const dt = Math.min(delta, 0.05);
+    const immersive = this.world.visibilityState.peek() !== VisibilityState.NonImmersive;
+    const showAll = immersive && stage.tutorialStep >= 3;
+    if (showAll !== stage.showAll || immersive !== this.wasImmersive) {
+      stage.showAll = showAll;
+      this.wasImmersive = immersive;
+      this.applyVisibility();
+    }
+    if (showAll) this.followHead();
     if (this.advanceIn >= 0) {
       this.advanceIn -= dt;
       if (this.advanceIn < 0) this.setStep(stage.tutorialStep + 1);

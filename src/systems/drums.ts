@@ -27,7 +27,7 @@ import {
 } from '@iwsdk/core';
 import { audio, type VoiceKind } from '../audio/engine.js';
 import { DrumPad } from '../resonance-components.js';
-import { COLORS, grabOnly, setShown, stage, trace } from '../stage.js';
+import { COLORS, fxAt, grabOnly, setShown, stage, trace } from '../stage.js';
 import { buildCymbal, buildDrum } from '../visuals/instruments.js';
 import { glowSprite, Label, ringTexture } from '../visuals/textures.js';
 
@@ -102,7 +102,7 @@ export class DrumSystem extends createSystem({
 
   init(): void {
     this.kit.name = 'DrumKit';
-    stage.root.add(this.kit);
+    stage.stations.drums.add(this.kit);
     this.invTilt.setFromAxisAngle(new Vector3(1, 0, 0), -PAD_TILT);
 
     KIT.forEach((def, id) => {
@@ -121,7 +121,7 @@ export class DrumSystem extends createSystem({
       object.add(model.group, halo, label.sprite);
       object.position.set(def.pos[0], def.pos[1], def.pos[2]);
       object.rotation.x = PAD_TILT;
-      const e = this.world.createTransformEntity(object, { parent: stage.rootEntity! });
+      const e = this.world.createTransformEntity(object, { parent: stage.stationEntities.drums });
       e.addComponent(DrumPad, { id });
       e.addComponent(RayInteractable); // mouse fallback
       // Pinch a pad to move it: build the kit that suits your reach. Rotation
@@ -190,7 +190,7 @@ export class DrumSystem extends createSystem({
     const score = this.hits / total;
     trace('lesson', this.lesson, 'score', this.hits, '/', total);
     if (score >= PASS_MARK) {
-      stage.burst(0, 0.1, 0, COLORS.mint, 40);
+      fxAt(stage.stations.drums, 0, 0.1, 0, COLORS.mint, 0, 40);
       if (this.lesson === LESSONS.length - 1) {
         this.stopLearning(`You can drum! ${this.hits}/${total}`);
         return;
@@ -211,14 +211,13 @@ export class DrumSystem extends createSystem({
     audio.start();
     const p = pad.object.position;
     this.local.copy(p);
-    stage.root.localToWorld(this.local);
+    stage.stations.drums.localToWorld(this.local);
     audio.play(pad.def.voice, 0, { velocity, live: true, x: this.local.x, y: this.local.y, z: this.local.z });
     pad.pulse = 1;
     let judged = '';
     if (this.learning && this.resumeIn < 0) judged = this.judge(id) ? 'hit' : 'stray';
     const color = judged === 'hit' ? COLORS.mint : pad.def.color;
-    stage.ripple(p.x, p.y, p.z, color, pad.def.radius * (judged === 'hit' ? 5 : 3.2));
-    stage.burst(p.x, p.y + 0.01, p.z, color, judged === 'hit' ? 14 : 7);
+    fxAt(stage.stations.drums, p.x, p.y + 0.005, p.z, color, pad.def.radius * (judged === 'hit' ? 5 : 3.2), judged === 'hit' ? 14 : 7);
     trace('drum', pad.def.name, velocity.toFixed(2), judged);
   }
 
@@ -247,7 +246,7 @@ export class DrumSystem extends createSystem({
     const sides = ['left', 'right'] as const;
     for (let h = 0; h < 2; h++) {
       this.player.indexTipSpaces[sides[h]].getWorldPosition(this.tip);
-      stage.root.worldToLocal(this.tip);
+      stage.stations.drums.worldToLocal(this.tip);
       // Hand poses update less often than frames render: smooth the speed.
       const raw = this.tip.distanceTo(this.prevTip[h]) / Math.max(rawDt, 0.001);
       this.speed[h] += (Math.min(raw, 4) - this.speed[h]) * 0.4;
@@ -297,7 +296,7 @@ export class DrumSystem extends createSystem({
       if (until < -HIT_WINDOW) {
         this.noteState[n] = 2; // missed
         const p = this.pads[padId].object.position;
-        stage.ripple(p.x, p.y, p.z, 0xff3355, 0.08);
+        fxAt(stage.stations.drums, p.x, p.y, p.z, 0xff3355, 0.08, 0);
         continue;
       }
       if (until > LEAD || used >= GUIDES) continue;
@@ -318,14 +317,18 @@ export class DrumSystem extends createSystem({
   }
 
   update(delta: number, time: number): void {
-    const visible = stage.mode === 'drums';
+    const active = stage.mode === 'drums';
+    const visible = active || stage.showAll;
     if (this.kit.visible !== visible) {
       setShown(this.kit, visible);
       this.pads.forEach((p) => setShown(p.object, visible));
       if (visible) this.status.set('Free play');
-      else if (this.learning) this.stopLearning('');
     }
-    if (!visible) return;
+    // Only the instrument you are facing listens to your hands.
+    if (!active) {
+      if (this.learning) this.stopLearning('Free play');
+      return;
+    }
     const dt = Math.min(delta, 0.05);
     if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectStrikes(delta);
     if (this.learning) this.updateLesson(dt);

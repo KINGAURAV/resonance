@@ -77,7 +77,7 @@ export class SequencerSystem extends createSystem({}) {
   }
 
   update(): void {
-    const visible = stage.tutorialStep >= 2 && stage.mode === 'playground';
+    const visible = stage.tutorialStep >= 2 && (stage.mode === 'playground' || stage.showAll);
     if (this.group.visible !== visible) setShown(this.group, visible);
     if (!visible) {
       this.wasRunning = false; // restart cleanly when the orbits return

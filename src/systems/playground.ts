@@ -33,7 +33,7 @@ import {
   VisibilityState,
 } from '@iwsdk/core';
 import { audio } from '../audio/engine.js';
-import { COLORS, LAYOUT, stage } from '../stage.js';
+import { COLORS, LAYOUT, MODES, placeStation, stage, STATION_ANGLE, STATION_NAME } from '../stage.js';
 import { glowSprite, glowTexture, Label, ringTexture } from '../visuals/textures.js';
 
 const RIPPLES = 14;
@@ -57,6 +57,8 @@ export class PlaygroundSystem extends createSystem({}) {
   private coreGlow!: Sprite;
   private coreAura!: Sprite;
   private wave!: LineLoop;
+  private signs: Label[] = [];
+  private uiAngle = 0;
   private stageGroup = new Group();
   private floorRings: Mesh[] = [];
   private ticks: Mesh[] = [];
@@ -88,6 +90,21 @@ export class PlaygroundSystem extends createSystem({}) {
     // Default (non-XR) placement for a seated-height camera at the origin.
     root.position.set(0, 0.83, -LAYOUT.forward);
     stage.rootEntity = this.world.createTransformEntity(root);
+    for (const mode of MODES) {
+      const g = new Group();
+      g.name = `Station ${mode}`;
+      placeStation(g, STATION_ANGLE[mode]);
+      stage.stations[mode] = g;
+      stage.stationEntities[mode] = this.world.createTransformEntity(g, { parent: stage.rootEntity });
+      // A floating name so you know what you are turning toward.
+      const sign = new Label(STATION_NAME[mode], 0.04, '#ffffff');
+      sign.sprite.position.set(0, 0.47, -0.12);
+      sign.opacity = 0;
+      g.add(sign.sprite);
+      this.signs.push(sign);
+    }
+    stage.uiStation.name = 'Station ui';
+    stage.uiEntity = this.world.createTransformEntity(stage.uiStation, { parent: stage.rootEntity });
 
     // One shadowless key light so the wood and chrome of the instruments
     // read as real materials. It travels with the playground.
@@ -461,6 +478,19 @@ export class PlaygroundSystem extends createSystem({}) {
       arr[i * 3 + 2] = Math.cos(a) * r;
     }
     wp.needsUpdate = true;
+
+    // Stations: fixed around the seat in VR; in desktop preview the arc
+    // spins so the active one faces the camera. Pebbles follow the active one.
+    const target = immersive ? 0 : STATION_ANGLE[stage.mode];
+    stage.carousel += (target - stage.carousel) * (1 - Math.exp(-dt * 6));
+    for (let i = 0; i < MODES.length; i++) {
+      const mode = MODES[i];
+      placeStation(stage.stations[mode], STATION_ANGLE[mode] - stage.carousel);
+      const facing = mode === stage.mode;
+      this.signs[i].opacity = stage.showAll ? (facing ? 0.95 : 0.55) : 0;
+    }
+    this.uiAngle += (STATION_ANGLE[stage.mode] - stage.carousel - this.uiAngle) * (1 - Math.exp(-dt * 8));
+    placeStation(stage.uiStation, this.uiAngle);
 
     // Stage: keep the floor on the real floor (the root rides at seat height).
     this.stageGroup.position.y = -stage.root.position.y;

@@ -27,7 +27,7 @@ import { COLORS, setShown, stage, trace } from '../stage.js';
 import { glowSprite, Label } from '../visuals/textures.js';
 
 const NOTES = 10; // two octaves of the pentatonic scale
-const STEP = 0.06; // meters of hand travel per note
+const STEP = 0.045; // meters of hand travel per note
 const BASE_Y = 0.02; // height of the marker row (root-local)
 const ROW_Z = 0.12;
 const NOTE_COLORS = [COLORS.cyan, COLORS.mint, COLORS.gold, COLORS.magenta, COLORS.violet];
@@ -50,7 +50,7 @@ export class GlideSystem extends createSystem({
   init(): void {
     const g = this.group;
     g.name = 'GlideSynth';
-    const entity = this.world.createTransformEntity(g, { parent: stage.rootEntity! });
+    const entity = this.world.createTransformEntity(g, { parent: stage.stationEntities.glide });
     const box = new BoxGeometry(0.022, 0.022, 0.022);
     for (let n = 0; n < NOTES; n++) {
       const m = new Mesh(
@@ -118,10 +118,10 @@ export class GlideSystem extends createSystem({
       return;
     }
     this.player.indexTipSpaces[side].getWorldPosition(this.tip);
-    stage.root.worldToLocal(this.tip);
+    stage.stations.glide.worldToLocal(this.tip);
     // Only play inside the instrument's space, so pinching a pebble or
     // resting a hand in the lap stays silent.
-    const inside = Math.abs(this.tip.x) < 0.36 && this.tip.y > -0.06 && this.tip.y < 0.45 && Math.abs(this.tip.z - ROW_Z) < 0.2;
+    const inside = Math.abs(this.tip.x) < 0.27 && this.tip.y > -0.06 && this.tip.y < 0.45 && Math.abs(this.tip.z - ROW_Z) < 0.2;
     if (!inside) {
       if (this.voices[h]) this.releaseHand(h);
       return;
@@ -157,17 +157,16 @@ export class GlideSystem extends createSystem({
   }
 
   update(delta: number): void {
-    const visible = stage.mode === 'glide';
-    if (this.group.visible !== visible) {
-      setShown(this.group, visible);
-      if (!visible) {
-        this.releaseHand(0);
-        this.releaseHand(1);
-      }
+    const active = stage.mode === 'glide';
+    const visible = active || stage.showAll;
+    if (this.group.visible !== visible) setShown(this.group, visible);
+    if (!active && (this.voices[0] || this.voices[1])) {
+      this.releaseHand(0);
+      this.releaseHand(1);
     }
     if (!visible) return;
     const dt = Math.min(delta, 0.05);
-    if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) {
+    if (active && this.world.visibilityState.peek() !== VisibilityState.NonImmersive) {
       this.updateHand(0, 'left');
       this.updateHand(1, 'right');
     }

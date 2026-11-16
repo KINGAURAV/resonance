@@ -31,7 +31,7 @@ import {
 } from '@iwsdk/core';
 import { audio } from '../audio/engine.js';
 import { GuitarChord, GuitarStrum } from '../resonance-components.js';
-import { COLORS, setShown, stage, trace } from '../stage.js';
+import { COLORS, fxAt, setShown, stage, trace } from '../stage.js';
 import { buildGuitarModel, GUITAR } from '../visuals/instruments.js';
 import { glowSprite, Label, ringTexture } from '../visuals/textures.js';
 
@@ -99,7 +99,7 @@ export class GuitarSystem extends createSystem({
     g.name = 'Guitar';
     g.position.set(0.02, -0.01, 0.15);
     g.rotation.x = -0.55; // face tilts up toward the seated player
-    const guitarEntity = this.world.createTransformEntity(g, { parent: stage.rootEntity! });
+    const guitarEntity = this.world.createTransformEntity(g, { parent: stage.stationEntities.guitar });
 
     // The instrument itself is decoration; raise it so the strings sit just
     // above the frets.
@@ -214,7 +214,7 @@ export class GuitarSystem extends createSystem({
       this.beatState[n] = 1;
       this.hits++;
       const p = this.guitar.position;
-      stage.ripple(p.x + STRUM_CENTER_X, p.y, p.z, COLORS.mint, 0.3);
+      fxAt(stage.stations.guitar, p.x + STRUM_CENTER_X, p.y, p.z, COLORS.mint, 0.3, 0);
       trace('strum hit beat', n, CHORDS[this.chord].name);
       return;
     }
@@ -252,7 +252,7 @@ export class GuitarSystem extends createSystem({
     const score = this.hits / this.beats;
     trace('guitar lesson', this.lesson, 'score', this.hits, '/', this.beats);
     if (score >= PASS_MARK) {
-      stage.burst(0, 0.12, 0.05, COLORS.gold, 40);
+      fxAt(stage.stations.guitar, 0, 0.12, 0.05, COLORS.gold, 0, 40);
       if (this.lesson === LESSONS.length - 1) {
         this.stopLearning(`You played a song! ${this.hits}/${this.beats}`);
         return;
@@ -344,13 +344,16 @@ export class GuitarSystem extends createSystem({
   }
 
   update(delta: number, time: number): void {
-    const visible = stage.mode === 'guitar';
+    const active = stage.mode === 'guitar';
+    const visible = active || stage.showAll;
     if (this.guitar.visible !== visible) {
       setShown(this.guitar, visible);
       if (visible) this.status.set('Free play');
-      else if (this.learning) this.stopLearning('');
     }
-    if (!visible) return;
+    if (!active) {
+      if (this.learning) this.stopLearning('Free play');
+      return;
+    }
     const dt = Math.min(delta, 0.05);
     if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectHands(delta);
     const wanted = this.learning ? this.updateLesson(dt) : -1;

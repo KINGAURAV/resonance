@@ -34,6 +34,10 @@ Competition 2026 — Entertainment track, New Experience division.
   raise or lower the hand to brighten or mellow the tone. Two hands = two
   voices; **Chords** makes each pinch a three-note chord.
 - Drum pads can be pinched and moved to build your own kit layout.
+- In VR the instruments sit in an arc around your seat: **turn your head** and
+  the one you face becomes active (playground ahead, drums and Lattice to the
+  left, guitar and Glide synth to the right). In desktop preview, the
+  `< Instrument` / `Instrument >` pebbles do the same.
 
 All sound is synthesized in the browser (Web Audio); nothing is downloaded and
 no network service is used.
