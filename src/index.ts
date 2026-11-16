@@ -1,6 +1,7 @@
 import { World } from '@iwsdk/core';
 import projectOptions from 'virtual:iwsdk-project';
 import { DrumSystem } from './systems/drums.js';
+import { GlideSystem } from './systems/glide.js';
 import { GuitarSystem } from './systems/guitar.js';
 import { LatticeSystem } from './systems/lattice.js';
 import { LooperSystem } from './systems/looper.js';
@@ -23,6 +24,7 @@ World.create(
   world.registerSystem(DrumSystem);
   world.registerSystem(GuitarSystem);
   world.registerSystem(LatticeSystem);
+  world.registerSystem(GlideSystem);
   world.registerSystem(LooperSystem);
   world.registerSystem(UISystem);
 });

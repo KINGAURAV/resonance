@@ -252,6 +252,15 @@ export class AudioEngine {
     }, ms);
   }
 
+  /**
+   * Start a sustained synth voice (up to three notes) that keeps sounding
+   * until released. Used by the Glide synth, where a pinch holds the note.
+   */
+  hold(): HeldVoice | null {
+    if (!this.ctx) return null;
+    return new HeldVoice(this.ctx, this.master, this.fxSend);
+  }
+
   // ---- building blocks -------------------------------------------------
 
   private osc(type: OscillatorType, freq: number, t: number, end: number): OscillatorNode {
@@ -532,3 +541,64 @@ export class AudioEngine {
 
 /** One engine for the whole app. */
 export const audio = new AudioEngine();
+
+/** A held, glidable synth voice: three detuned oscillator pairs and a filter. */
+export class HeldVoice {
+  private oscs: OscillatorNode[] = [];
+  private gains: GainNode[] = [];
+  private filter: BiquadFilterNode;
+  private out: GainNode;
+  private send: GainNode;
+
+  constructor(private ctx: AudioContext, master: AudioNode, fx: AudioNode) {
+    this.filter = ctx.createBiquadFilter();
+    this.filter.type = 'lowpass';
+    this.filter.Q.value = 3;
+    this.out = ctx.createGain();
+    this.out.gain.value = 0.0001;
+    this.send = ctx.createGain();
+    this.send.gain.value = 0.45;
+    this.filter.connect(this.out);
+    this.out.connect(master);
+    this.out.connect(this.send).connect(fx);
+    for (let i = 0; i < 3; i++) {
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      g.connect(this.filter);
+      for (const [type, detune] of [['sawtooth', -6], ['triangle', 5]] as const) {
+        const o = ctx.createOscillator();
+        o.type = type;
+        o.detune.value = detune;
+        o.connect(g);
+        o.start();
+        this.oscs.push(o);
+      }
+      this.gains.push(g);
+    }
+    // Soft attack so a pinch never clicks.
+    this.out.gain.setTargetAtTime(0.16, ctx.currentTime, 0.03);
+  }
+
+  /** Glide to new notes (1 to 3 frequencies) and filter brightness (Hz). */
+  set(freqs: number[], cutoff: number): void {
+    const t = this.ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const f = freqs[i];
+      this.gains[i].gain.setTargetAtTime(f ? (i === 0 ? 1 : 0.6) : 0, t, 0.02);
+      if (!f) continue;
+      this.oscs[i * 2].frequency.setTargetAtTime(f, t, 0.025);
+      this.oscs[i * 2 + 1].frequency.setTargetAtTime(f, t, 0.025);
+    }
+    this.filter.frequency.setTargetAtTime(cutoff, t, 0.04);
+  }
+
+  release(): void {
+    const t = this.ctx.currentTime;
+    this.out.gain.setTargetAtTime(0.0001, t, 0.12);
+    for (const o of this.oscs) o.stop(t + 1);
+    setTimeout(() => {
+      this.out.disconnect();
+      this.send.disconnect();
+    }, 1200);
+  }
+}

@@ -30,6 +30,9 @@ Competition 2026 — Entertainment track, New Experience division.
 - Poke **Lattice** for a block of 30 note cubes (five notes x three octaves x
   two timbres). Touch cubes to play; with **Arp** on, cubes latch and the
   arpeggiator cycles through them in tempo.
+- Poke **Glide synth**: pinch to hold a note, slide sideways to change pitch,
+  raise or lower the hand to brighten or mellow the tone. Two hands = two
+  voices; **Chords** makes each pinch a three-note chord.
 - Drum pads can be pinched and moved to build your own kit layout.
 
 All sound is synthesized in the browser (Web Audio); nothing is downloaded and
@@ -62,6 +65,7 @@ On this machine Node 22 is installed side by side:
 | `src/systems/drums.ts` | Drum kit, strike detection, learn-a-beat lessons |
 | `src/systems/guitar.ts` | Air guitar: chord blocks, strum detection, learn-a-song lessons |
 | `src/systems/lattice.ts` | Note-cube lattice and arpeggiator |
+| `src/systems/glide.ts` | Pinch-to-play sustained synth |
 | `src/systems/looper.ts` | Cross-instrument loop recorder and overdub |
 | `src/visuals/instruments.ts` | Procedural guitar and drum models |
 | `src/systems/ui.ts` | Control pebbles, guided intro, title overlay |

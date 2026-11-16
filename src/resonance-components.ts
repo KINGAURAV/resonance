@@ -35,3 +35,8 @@ export const GuitarStrum = createComponent('GuitarStrum', {});
 export const LatticeCell = createComponent('LatticeCell', {
   id: { type: Types.Int8, default: 0 },
 });
+
+/** A note marker of the Glide synth (clickable in desktop preview). */
+export const GlideNote = createComponent('GlideNote', {
+  id: { type: Types.Int8, default: 0 },
+});

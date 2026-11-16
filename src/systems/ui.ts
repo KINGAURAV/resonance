@@ -36,7 +36,7 @@ const HINTS = ['Touch to create sound', 'Grab. Stretch. Pluck.', 'Create your rh
 
 // Left column = performance, right column = composition.
 // [action, label, side, grid cell, mode it belongs to]
-type PebbleMode = 'playground' | 'drums' | 'guitar' | 'lattice' | 'studio' | 'all'; // studio = any instrument
+type PebbleMode = 'playground' | 'drums' | 'guitar' | 'lattice' | 'glide' | 'studio' | 'all'; // studio = any instrument
 const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['play', 'Pause', -1, 0, 'playground'],
   ['beat', 'Beat', -1, 1, 'playground'],
@@ -49,6 +49,8 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['drums', 'Drums', 1, 4, 'playground'],
   ['guitar', 'Guitar', 1, 5, 'playground'],
   ['lattice', 'Lattice', 1, 6, 'playground'],
+  ['glide', 'Glide synth', 1, 7, 'playground'],
+  ['glideChord', 'Chords: off', 1, 4, 'glide'],
   ['arp', 'Arp: off', 1, 4, 'lattice'],
   ['arpClear', 'Clear notes', 1, 2, 'lattice'],
   ['learn', 'Learn a beat', 1, 4, 'drums'],
@@ -72,7 +74,7 @@ export class UISystem extends createSystem({
     for (const [action, text, side, row, mode] of PEBBLES) {
       const object = new Group();
       object.name = `Pebble ${action}`;
-      const color = mode === 'all' ? 0xff5a6e : mode !== 'playground' || action === 'drums' || action === 'guitar' || action === 'lattice' ? COLORS.gold : side < 0 ? COLORS.cyan : COLORS.violet;
+      const color = mode === 'all' ? 0xff5a6e : mode !== 'playground' || action === 'drums' || action === 'guitar' || action === 'lattice' || action === 'glide' ? COLORS.gold : side < 0 ? COLORS.cyan : COLORS.violet;
       const mat = new MeshStandardMaterial({
         color, emissive: color, emissiveIntensity: 0.5,
         transparent: true, opacity: 0.85, roughness: 0.2, metalness: 0.2,
@@ -231,6 +233,10 @@ export class UISystem extends createSystem({
       case 'lattice':
         stage.setMode('lattice');
         stage.toast('Reach in and touch the cubes');
+        break;
+      case 'glide':
+        stage.setMode('glide');
+        stage.toast('Pinch to play. Move to change the note');
         break;
       case 'playground':
         stage.setMode('playground');
