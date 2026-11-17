@@ -55,6 +55,15 @@ Competition 2026 — Entertainment track, New Experience division.
   (Twinkle Twinkle, Ode to Joy, Jingle Bells, all public domain); press each
   key as its tile lands. The next key glows gold, the song waits if you miss
   a note, and you get an on-time score at the end.
+- **Pinch the gold bar** behind the piano to move it to suit your reach.
+- **Every instrument has a lesson** with on-screen steps:
+  - Playground: **Learn: Echo**, five call-and-response rounds: the shapes
+    play a phrase, then you touch the gold shape each time to echo it.
+  - Lattice and Glide synth: **Learn a song** (Mary Had a Little Lamb,
+    Amazing Grace, Hot Cross Buns; each press starts the next song). Step 1:
+    listen while the notes light up. Step 2: play the gold note each time;
+    the lesson waits for you and counts wrong notes.
+  - Drums: Learn a beat. Guitar: Learn a song. Piano: Learn a song (tiles).
 - **Hold guitar** (VR): the guitar comes into your hands. The body rests in
   front of your stomach and the neck follows your left hand; slide the left
   hand along the neck to change chord and strum over the body with your right.
@@ -90,6 +99,8 @@ On this machine Node 22 is installed side by side:
 | `src/systems/guitar.ts` | Air guitar: chord blocks, strum detection, learn-a-song lessons |
 | `src/systems/lattice.ts` | Note-cube lattice and arpeggiator |
 | `src/systems/glide.ts` | Pinch-to-play sustained synth |
+| `src/systems/coach.ts` | Shared listen-then-play song lesson (Lattice, Glide, Echo) |
+| `src/systems/echo.ts` | Playground Echo lesson |
 | `src/systems/piano.ts` | Two-octave piano: ten-finger key detection, sustain, sounds, scale and chord guides |
 | `src/systems/looper.ts` | Cross-instrument loop recorder and overdub |
 | `src/visuals/instruments.ts` | Procedural guitar and drum models |

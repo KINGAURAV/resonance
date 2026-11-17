@@ -7,6 +7,9 @@
  * a cube latches it instead, and the arp cycles through every latched cube
  * in time with the tempo: tap a few cubes and you have a pattern.
  * The cube under your fingertip (or mouse) shows its note name.
+ *
+ * Learn a song: the Lattice plays a tune while its cubes light up, then you
+ * play it back one note at a time, touching the gold cube each time.
  */
 import {
   AdditiveBlending,
@@ -30,7 +33,8 @@ import { audio } from '../audio/engine.js';
 import { noteFreq, noteName } from '../audio/scale.js';
 import { LatticeCell } from '../resonance-components.js';
 import { COLORS, fxAt, setShown, stage, trace } from '../stage.js';
-import { Label } from '../visuals/textures.js';
+import { glowSprite, Label } from '../visuals/textures.js';
+import { NO_NOTE, SCALE_SONGS, SongCoach } from './coach.js';
 
 const COLS = 5;
 const ROWS = 3;
@@ -47,6 +51,9 @@ export class LatticeSystem extends createSystem({
   hovered: { required: [LatticeCell, Hovered] },
 }) {
   private tag!: Label;
+  private coach!: SongCoach;
+  private songIndex = -1;
+  private guide = glowSprite(COLORS.gold, 0.09, 0.9);
   private tagCell = -1;
   private group = new Group();
   private mats: MeshBasicMaterial[] = [];
@@ -133,6 +140,34 @@ export class LatticeSystem extends createSystem({
       if (!this.arp) this.latched.fill(0);
     };
     stage.actions.arpClear = () => this.latched.fill(0);
+
+    this.guide.visible = false;
+    g.add(this.guide);
+    this.coach = new SongCoach(
+      (step) => this.sound(this.cellFor(step), 0.7, 0, false),
+      (text) => this.status.set(text),
+      () => stage.setPebbleLabel('latticeLearn', 'Learn a song'),
+    );
+    stage.actions.latticeLearn = () => {
+      if (this.coach.active) {
+        this.coach.stop();
+        this.status.set('Touch the cubes');
+        stage.setPebbleLabel('latticeLearn', 'Learn a song');
+        return;
+      }
+      audio.start();
+      if (this.arp) stage.actions.arp(); // the lesson needs plain touches
+      this.songIndex = (this.songIndex + 1) % SCALE_SONGS.length;
+      this.coach.start(SCALE_SONGS[this.songIndex]);
+      stage.setPebbleLabel('latticeLearn', 'Stop song');
+    };
+  }
+
+  /** Front cube for a scale step (0 = C4). */
+  private cellFor(step: number): number {
+    const row = Math.floor(step / COLS) + 1;
+    const col = ((step % COLS) + COLS) % COLS;
+    return Math.min(ROWS - 1, Math.max(0, row)) * COLS + col;
   }
 
   private sound(id: number, velocity: number, when: number, live: boolean): void {
@@ -156,6 +191,9 @@ export class LatticeSystem extends createSystem({
     } else {
       this.sound(id, velocity, 0, true);
       trace('lattice note', id);
+      const col = id % COLS;
+      const row = Math.floor(id / COLS) % ROWS;
+      this.coach.hit(col + COLS * (row - 1));
     }
     const c = this.cubes[id].position;
     const p = this.group.position;
@@ -225,6 +263,12 @@ export class LatticeSystem extends createSystem({
   }
 
   update(delta: number): void {
+    if (stage.mode !== 'lattice' && this.coach.active) {
+      // Moving to another instrument ends the lesson.
+      this.coach.stop();
+      this.status.set('Touch the cubes');
+      stage.setPebbleLabel('latticeLearn', 'Learn a song');
+    }
     const active = stage.mode === 'lattice';
     const visible = active || stage.showAll;
     if (this.group.visible !== visible) {
@@ -237,6 +281,14 @@ export class LatticeSystem extends createSystem({
     if (!visible) return;
     const dt = Math.min(delta, 0.05);
     if (active && this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectHands(delta);
+    // Lesson guide: a gold glow on the cube to play next.
+    const target = this.coach.active ? this.coach.update(dt) : NO_NOTE;
+    this.guide.visible = target !== NO_NOTE;
+    if (this.guide.visible) {
+      const c = this.cubes[this.cellFor(target)].position;
+      this.guide.position.copy(c);
+      this.guide.scale.setScalar(0.08 + Math.sin(performance.now() / 120) * 0.012);
+    }
     // Note-name tag over the cube a finger is in, else the hovered one.
     let tagCell = this.handCell[1] >= 0 ? this.handCell[1] : this.handCell[0];
     if (tagCell < 0) for (const e of this.queries.hovered.entities) tagCell = e.getValue(LatticeCell, 'id') ?? -1;

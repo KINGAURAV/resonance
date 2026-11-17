@@ -6,6 +6,10 @@
  * raise or lower it to open or close the filter (bright vs mellow). Each
  * hand is its own voice, so two hands make harmony; with Chords on, every
  * pinch plays a three-note chord.
+ *
+ * Learn a song: the synth plays a tune while its note markers light up;
+ * then you pinch the gold marker for each note in turn (let go and pinch
+ * again to repeat a note).
  */
 import {
   AdditiveBlending,
@@ -25,6 +29,7 @@ import { noteFreq, noteName } from '../audio/scale.js';
 import { GlideNote } from '../resonance-components.js';
 import { COLORS, setShown, stage, trace } from '../stage.js';
 import { glowSprite, Label } from '../visuals/textures.js';
+import { NO_NOTE, SCALE_SONGS, SongCoach } from './coach.js';
 
 const NOTES = 10; // two octaves of the pentatonic scale
 const STEP = 0.045; // meters of hand travel per note
@@ -46,6 +51,10 @@ export class GlideSystem extends createSystem({
   private tip = new Vector3();
   private freqs: number[] = [0, 0, 0];
   private chords = false;
+  private hint!: Label;
+  private coach!: SongCoach;
+  private songIndex = -1;
+  private guide = glowSprite(COLORS.gold, 0.08, 0.9);
 
   init(): void {
     const g = this.group;
@@ -86,6 +95,29 @@ export class GlideSystem extends createSystem({
     const hint = new Label('Pinch and move', 0.026, '#ffffff');
     hint.sprite.position.set(0, 0.3, 0.02);
     g.add(hint.sprite);
+    this.hint = hint;
+    this.guide.visible = false;
+    g.add(this.guide);
+    this.coach = new SongCoach(
+      (step) => {
+        audio.play('soft', noteFreq(step), { velocity: 0.7 });
+        this.glow[step + 5] = 1;
+      },
+      (text) => this.hint.set(text),
+      () => stage.setPebbleLabel('glideLearn', 'Learn a song'),
+    );
+    stage.actions.glideLearn = () => {
+      if (this.coach.active) {
+        this.coach.stop();
+        this.hint.set('Pinch and move');
+        stage.setPebbleLabel('glideLearn', 'Learn a song');
+        return;
+      }
+      audio.start();
+      this.songIndex = (this.songIndex + 1) % SCALE_SONGS.length;
+      this.coach.start(SCALE_SONGS[this.songIndex]);
+      stage.setPebbleLabel('glideLearn', 'Stop song');
+    };
     setShown(g, false);
 
     this.cleanupFuncs.push(
@@ -95,6 +127,7 @@ export class GlideSystem extends createSystem({
         audio.start();
         audio.play('soft', noteFreq(n - 5), { velocity: 0.8, live: true });
         this.glow[n] = 1;
+        this.coach.hit(n - 5);
       }),
     );
     stage.actions.glideChord = () => {
@@ -128,12 +161,14 @@ export class GlideSystem extends createSystem({
     }
     const n = Math.min(NOTES - 1, Math.max(0, Math.round(this.tip.x / STEP + (NOTES - 1) / 2)));
     const height = Math.min(1, Math.max(0, (this.tip.y - BASE_Y) / 0.3));
-    if (!this.voices[h]) {
+    const fresh = !this.voices[h];
+    if (fresh) {
       audio.start();
       this.voices[h] = audio.hold();
     }
-    if (n !== this.note[h]) {
+    if (n !== this.note[h] || fresh) {
       this.note[h] = n;
+      this.coach.hit(n - 5); // a new pinch or a new note counts for the lesson
       trace('glide', side, noteName(n - 5), this.chords ? 'chord' : '');
     }
     // Pentatonic steps 0, +2, +4 stack into a consonant three-note chord.
@@ -157,6 +192,12 @@ export class GlideSystem extends createSystem({
   }
 
   update(delta: number): void {
+    if (stage.mode !== 'glide' && this.coach.active) {
+      // Moving to another instrument ends the lesson.
+      this.coach.stop();
+      this.hint.set('Pinch and move');
+      stage.setPebbleLabel('glideLearn', 'Learn a song');
+    }
     const active = stage.mode === 'glide';
     const visible = active || stage.showAll;
     if (this.group.visible !== visible) setShown(this.group, visible);
@@ -166,6 +207,12 @@ export class GlideSystem extends createSystem({
     }
     if (!visible) return;
     const dt = Math.min(delta, 0.05);
+    const target = this.coach.active ? this.coach.update(dt) : NO_NOTE;
+    this.guide.visible = target !== NO_NOTE && target + 5 >= 0 && target + 5 < NOTES;
+    if (this.guide.visible) {
+      this.guide.position.copy(this.markers[target + 5].position);
+      this.guide.scale.setScalar(0.07 + Math.sin(performance.now() / 120) * 0.012);
+    }
     if (active && this.world.visibilityState.peek() !== VisibilityState.NonImmersive) {
       this.updateHand(0, 'left');
       this.updateHand(1, 'right');

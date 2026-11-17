@@ -15,6 +15,9 @@
  * Controls (pebbles): octave down/up, sustain, volume, sound (grand,
  * electric, soft), note labels, scale highlight, chord guide.
  *
+ * Move it: pinch the gold bar along the back and carry the piano wherever
+ * suits your reach (like the drum pads).
+ *
  * Learn a song: glowing tiles fall onto the keys in time with the tune, and
  * you press each key as its tile lands. The song waits for you if you miss
  * one (so beginners can go at their own pace) and scores how many notes you
@@ -24,11 +27,14 @@ import {
   AdditiveBlending,
   BoxGeometry,
   createSystem,
+  CylinderGeometry,
+  Grabbed,
   Group,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  OneHandGrabbable,
   Pressed,
   RayInteractable,
   Vector3,
@@ -36,7 +42,7 @@ import {
 } from '@iwsdk/core';
 import { audio, PIANO_KINDS } from '../audio/engine.js';
 import { PianoKey } from '../resonance-components.js';
-import { COLORS, fxAt, setShown, stage, trace } from '../stage.js';
+import { COLORS, fxAt, grabOnly, setShown, stage, trace } from '../stage.js';
 import { decor } from '../visuals/instruments.js';
 import { glowSprite, Label } from '../visuals/textures.js';
 
@@ -168,6 +174,10 @@ export class PianoSystem extends createSystem({
   private tagAlpha = 0;
   private chordDone = -1;
   private wasActive = false;
+  // Move handle: the piano follows it, keeping this offset.
+  private handle = new Group();
+  private handleEntity!: ReturnType<PianoSystem['world']['createTransformEntity']>;
+  private handleOffset = new Vector3(0, 0.048, -0.118);
 
   // Learn a song.
   private song = 0;
@@ -186,6 +196,22 @@ export class PianoSystem extends createSystem({
     g.position.set(0, -0.05, 0.19);
     g.rotation.x = 0.06; // front edge dips slightly toward you
     const entity = this.world.createTransformEntity(g, { parent: stage.stationEntities.piano });
+
+    // A gold bar along the back: pinch it to carry the piano somewhere else.
+    const h = this.handle;
+    h.name = 'Piano handle';
+    const bar = new Mesh(
+      new CylinderGeometry(0.009, 0.009, 0.16, 12),
+      new MeshStandardMaterial({ color: COLORS.gold, emissive: COLORS.gold, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.5 }),
+    );
+    bar.rotation.z = Math.PI / 2;
+    const handleLabel = new Label('Pinch to move', 0.014);
+    handleLabel.sprite.position.y = 0.025;
+    h.add(bar, glowSprite(COLORS.gold, 0.12, 0.35), handleLabel.sprite);
+    h.position.copy(g.position).add(this.handleOffset);
+    this.handleEntity = this.world.createTransformEntity(h, { parent: stage.stationEntities.piano });
+    this.handleEntity.addComponent(OneHandGrabbable, { rotate: false });
+    setShown(h, false);
     for (let i = 0; i < FINGERS; i++) this.tips.push(new Vector3());
 
     this.buildCase();
@@ -622,7 +648,16 @@ export class PianoSystem extends createSystem({
   update(delta: number, time: number): void {
     const active = stage.mode === 'piano';
     const visible = active || stage.showAll;
-    if (this.piano.visible !== visible) setShown(this.piano, visible);
+    if (this.piano.visible !== visible) {
+      setShown(this.piano, visible);
+      setShown(this.handle, visible);
+    }
+    if (visible) {
+      grabOnly(this.handle);
+      // The keyboard rides along with its handle.
+      this.piano.position.copy(this.handle.position).sub(this.handleOffset);
+      if (this.handleEntity.hasComponent(Grabbed)) this.releaseAll();
+    }
     if (active !== this.wasActive) {
       this.wasActive = active;
       if (active) this.say('Play with your fingertips');

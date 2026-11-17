@@ -1,6 +1,7 @@
 import { World } from '@iwsdk/core';
 import projectOptions from 'virtual:iwsdk-project';
 import { DrumSystem } from './systems/drums.js';
+import { EchoSystem } from './systems/echo.js';
 import { GlideSystem } from './systems/glide.js';
 import { GuitarSystem } from './systems/guitar.js';
 import { LatticeSystem } from './systems/lattice.js';
@@ -29,4 +30,5 @@ World.create(
   world.registerSystem(PianoSystem);
   world.registerSystem(LooperSystem);
   world.registerSystem(UISystem);
+  world.registerSystem(EchoSystem); // after UISystem: wraps its onNote hook
 });
