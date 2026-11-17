@@ -7,8 +7,12 @@
  * selected. Sweep a fingertip across the strings over the body to strum; each
  * string sounds as the finger crosses it, so slow sweeps arpeggiate.
  *
+ * Strum direction matters: a downstroke (low string first) is full and warm,
+ * an upstroke is lighter and brighter, like a real guitar.
+ *
  * "Learn a song" mirrors the drum lessons: a ring closes on the strum area and
- * lands on each beat, and the chord to hold next lights up.
+ * lands on each beat, an arrow shows which way to strum, the chord to hold
+ * next lights up, and each strum is marked Early, Perfect or Late.
  */
 import {
   AdditiveBlending,
@@ -51,11 +55,13 @@ const STRUM_MAX_X = 0.25;
 const STRUM_CENTER_X = 0.12;
 
 // Each lesson lists one chord per bar (four strums per bar).
-const LESSONS: { name: string; bars: number[] }[] = [
-  { name: 'Lesson 1: Strum on the beat', bars: [0, 0] },
-  { name: 'Lesson 2: Change chords', bars: [0, 1, 0, 1] },
-  { name: 'Lesson 3: Four-chord song', bars: [0, 1, 2, 3] },
+// `strokes` is the strum direction for each beat of a bar: D down, U up.
+const LESSONS: { name: string; bars: number[]; strokes: string }[] = [
+  { name: 'Lesson 1: Strum on the beat', bars: [0, 0], strokes: 'DDDD' },
+  { name: 'Lesson 2: Change chords', bars: [0, 1, 0, 1], strokes: 'DDDD' },
+  { name: 'Lesson 3: Four-chord song', bars: [0, 1, 2, 3], strokes: 'DDUD' },
 ];
+const PERFECT = 0.07;
 const BEAT = 60 / 72;
 const HIT_WINDOW = 0.22;
 const LEAD = 0.8;
@@ -93,6 +99,10 @@ export class GuitarSystem extends createSystem({
   private hits = 0;
   private clicks = 0;
   private resumeIn = -1;
+  private arrow!: Label;
+  private feel!: Label;
+  private feelAlpha = 0;
+  private judgedAt = -1; // one verdict per strum, not per string
 
   init(): void {
     const g = this.guitar;
@@ -163,6 +173,15 @@ export class GuitarSystem extends createSystem({
     this.status = new Label('', 0.034, '#ffffff');
     this.status.sprite.position.set(0, 0.2, -0.06);
     g.add(this.status.sprite);
+    // Direction arrow for the next strum, beside the strum ring.
+    this.arrow = new Label('', 0.07, '#ffc86b');
+    this.arrow.sprite.position.set(STRUM_MAX_X + 0.04, 0, 0.02);
+    this.arrow.opacity = 0;
+    g.add(this.arrow.sprite);
+    this.feel = new Label('', 0.03, '#ffffff');
+    this.feel.sprite.position.set(STRUM_CENTER_X, 0.1, 0.02);
+    this.feel.opacity = 0;
+    g.add(this.feel.sprite);
     setShown(g, false);
 
     this.cleanupFuncs.push(
@@ -185,7 +204,7 @@ export class GuitarSystem extends createSystem({
     trace('chord', CHORDS[id].name);
   }
 
-  private pluck(i: number, velocity: number, when = 0): void {
+  private pluck(i: number, velocity: number, when = 0, down = true): void {
     const now = performance.now();
     if (when === 0 && now - this.lastPluck[i] < 45) return; // debounce
     this.lastPluck[i] = now;
@@ -196,28 +215,45 @@ export class GuitarSystem extends createSystem({
     if (midi >= 0) {
       this.guitar.getWorldPosition(this.worldPos);
       audio.play('pluck', midiFreq(midi), {
-        // Kept quiet and dark on purpose: six strings ring at once.
-        when, velocity: velocity * 0.45, brightness: 0.25, live: true,
+        // Kept quiet and dark on purpose: six strings ring at once. Upstrokes
+        // catch the strings lighter and brighter.
+        when, velocity: velocity * (down ? 0.45 : 0.36), brightness: down ? 0.25 : 0.4, live: true,
         x: this.worldPos.x, y: this.worldPos.y, z: this.worldPos.z,
       });
     }
-    if (this.learning && this.resumeIn < 0) this.judge(when || audio.now);
+    if (this.learning && this.resumeIn < 0) this.judge(when || audio.now, down);
   }
 
   /** A strum counts for a beat if it is in time and on the right chord. */
-  private judge(t: number): void {
-    const bars = LESSONS[this.lesson].bars;
+  private judge(t: number, down: boolean): void {
+    if (t - this.judgedAt < 0.15) return; // the other strings of the same strum
+    this.judgedAt = t;
+    const { bars, strokes } = LESSONS[this.lesson];
     for (let n = 0; n < this.beats; n++) {
       if (this.beatState[n] !== 0) continue;
-      if (Math.abs(this.startTime + n * BEAT - t) > HIT_WINDOW) continue;
-      if (bars[Math.floor(n / 4)] !== this.chord) return;
+      const off = this.startTime + n * BEAT - t; // > 0: early
+      if (Math.abs(off) > HIT_WINDOW) continue;
+      if (bars[Math.floor(n / 4)] !== this.chord) {
+        this.showFeel(`Wrong chord: hold ${CHORDS[bars[Math.floor(n / 4)]].name}`, '#ff8899');
+        return;
+      }
       this.beatState[n] = 1;
       this.hits++;
+      const wantDown = strokes[n % 4] === 'D';
+      if (wantDown !== down) this.showFeel(wantDown ? 'Good - try a downstroke' : 'Good - try an upstroke', '#ffc86b');
+      else if (Math.abs(off) <= PERFECT) this.showFeel('Perfect', '#6bffc0');
+      else this.showFeel(off > 0 ? 'Early' : 'Late', '#ffc86b');
       const p = this.guitar.position;
       fxAt(stage.stations.guitar, p.x + STRUM_CENTER_X, p.y, p.z, COLORS.mint, 0.3, 0);
       trace('strum hit beat', n, CHORDS[this.chord].name);
       return;
     }
+  }
+
+  private showFeel(text: string, color: string): void {
+    this.feel.setColor(color);
+    this.feel.set(text);
+    this.feelAlpha = 1;
   }
 
   private startLearning(): void {
@@ -232,6 +268,7 @@ export class GuitarSystem extends createSystem({
     this.learning = false;
     this.resumeIn = -1;
     this.guide.visible = false;
+    this.arrow.opacity = 0;
     this.status.set(message);
     stage.setPebbleLabel('learnGuitar', 'Learn a song');
   }
@@ -295,6 +332,7 @@ export class GuitarSystem extends createSystem({
     }
     if (next < 0) {
       this.guide.visible = false;
+      this.arrow.opacity = 0;
       if (now > this.startTime + (this.beats - 1) * BEAT + HIT_WINDOW) this.finishAttempt();
       return -1;
     }
@@ -304,6 +342,10 @@ export class GuitarSystem extends createSystem({
     this.guide.scale.setScalar(0.12 * (1 + frac * 1.8));
     this.guide.material.opacity = 1 - frac * 0.7;
     this.guide.material.color.setHex(frac < 0.12 ? 0xffffff : COLORS.gold);
+    const down = LESSONS[this.lesson].strokes[next % 4] === 'D';
+    this.arrow.set(down ? '\u2193' : '\u2191');
+    this.arrow.setColor(down ? '#ffc86b' : '#6bd8ff');
+    this.arrow.opacity = until < LEAD ? 1 - frac * 0.6 : 0;
     return bars[Math.floor(next / 4)];
   }
 
@@ -335,7 +377,9 @@ export class GuitarSystem extends createSystem({
         const velocity = Math.min(1, Math.max(0.3, speed / 1.2));
         for (let i = 0; i < STRINGS; i++) {
           const sy = stringY(i);
-          if ((this.prevY[h] - sy) * (y - sy) < 0) this.pluck(i, velocity);
+          // Strings are numbered top (low E) to bottom, so a fingertip moving
+          // toward negative y is a downstroke.
+          if ((this.prevY[h] - sy) * (y - sy) < 0) this.pluck(i, velocity, 0, y < this.prevY[h]);
         }
       }
       this.prevValid[h] = inStrum;
@@ -357,6 +401,8 @@ export class GuitarSystem extends createSystem({
     const dt = Math.min(delta, 0.05);
     if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectHands(delta);
     const wanted = this.learning ? this.updateLesson(dt) : -1;
+    this.feelAlpha = Math.max(0, this.feelAlpha - dt * 1.2);
+    this.feel.opacity = this.feelAlpha;
 
     for (let i = 0; i < STRINGS; i++) {
       this.vib[i] = Math.max(0, this.vib[i] - dt * 1.8);

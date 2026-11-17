@@ -97,6 +97,14 @@ export class Label {
     this.tex.needsUpdate = true;
   }
 
+  setColor(color: string): void {
+    if (color === this.color) return;
+    this.color = color;
+    const t = this.text;
+    this.text = '';
+    this.set(t);
+  }
+
   set opacity(v: number) {
     this.sprite.material.opacity = v;
     this.sprite.visible = v > 0.01;

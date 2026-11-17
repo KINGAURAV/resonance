@@ -35,6 +35,7 @@ interface PebbleState {
 // Stations from left to right, for the desktop arrow pebbles.
 const ARC: StudioMode[] = ['lattice', 'drums', 'playground', 'guitar', 'glide'];
 const DONE_KEY = 'resonance.introDone';
+const CONFIRM_MS = 3000;
 const HINTS = ['Touch to create sound', 'Grab. Stretch. Pluck.', 'Create your rhythm: drop a shape on an orbit', ''];
 
 // Left column = performance, right column = composition.
@@ -58,6 +59,8 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['next', 'Instrument >', 1, 6, 'all'],
   ['loop', 'Record loop', -1, 4, 'all'],
   ['loopClear', 'Clear loop', -1, 5, 'all'],
+  ['loopUndo', 'Undo layer', 1, 5, 'all'],
+  ['snap', 'Snap: on', -1, 7, 'all'],
 ];
 
 export class UISystem extends createSystem({
@@ -70,6 +73,10 @@ export class UISystem extends createSystem({
   private lastPress = 0;
   private wasImmersive = false;
   private look = new Vector3();
+  private clearArmedAt = -1; // Reset needs a second tap within CONFIRM_MS
+  private statusTop!: Label;
+  private statusLoop!: Label;
+  private statusIn = 0;
 
   init(): void {
     const geo = new SphereGeometry(0.017, 20, 14);
@@ -102,6 +109,13 @@ export class UISystem extends createSystem({
 
     this.hint = new Label('', 0.024, '#ffffff');
     stage.root.add(this.hint.sprite);
+
+    // Studio status line: high and small, above every instrument's controls.
+    this.statusTop = new Label('', 0.032, '#ffffff');
+    this.statusTop.sprite.position.set(0, 0.38, -0.05);
+    this.statusLoop = new Label('', 0.026, '#ffd6de');
+    this.statusLoop.sprite.position.set(0, 0.345, -0.05);
+    stage.uiStation.add(this.statusTop.sprite, this.statusLoop.sprite);
 
     this.cleanupFuncs.push(
       this.queries.pressed.subscribe('qualify', (entity) => {
@@ -222,6 +236,15 @@ export class UISystem extends createSystem({
         stage.toast(loadComposition() ? 'Composition loaded' : 'Nothing saved yet');
         break;
       case 'clear':
+        // Two taps: a stray poke should never wipe someone's arrangement.
+        if (this.clearArmedAt < 0 || performance.now() - this.clearArmedAt > CONFIRM_MS) {
+          this.clearArmedAt = performance.now();
+          p?.label.set('Tap to confirm');
+          stage.toast('Tap Reset again to clear the playground');
+          break;
+        }
+        this.clearArmedAt = -1;
+        p?.label.set('Reset');
         stage.resonators.forEach((r) => resetResonator(r));
         stage.stringEnds[0].set(-0.13, 0.02, 0.25);
         stage.stringEnds[1].set(0.13, 0.02, 0.25);
@@ -298,6 +321,23 @@ export class UISystem extends createSystem({
     else if (step === 1) s.position.copy(stage.stringEnds[0]).lerp(stage.stringEnds[1], 0.5);
     else s.position.set(0, 0.2, -0.05);
     s.position.y += 0.085 + Math.sin(time * 2) * 0.004;
+
+    if (this.clearArmedAt >= 0 && performance.now() - this.clearArmedAt > CONFIRM_MS) {
+      this.clearArmedAt = -1;
+      stage.setPebbleLabel('clear', 'Reset');
+    }
+    // Refresh the status line a few times a second (Label skips unchanged text).
+    this.statusIn -= dt;
+    if (this.statusIn <= 0) {
+      this.statusIn = 0.25;
+      const show = stage.tutorialStep >= 3;
+      this.statusTop.opacity = show ? 0.95 : 0;
+      this.statusLoop.opacity = show ? 0.9 : 0;
+      if (show) {
+        this.statusTop.set(`${stage.bpm} BPM  \u00b7  Key C  \u00b7  4/4`);
+        this.statusLoop.set(stage.loopStatus);
+      }
+    }
 
     for (const p of this.pebbles) {
       p.pulse = Math.max(0, p.pulse - dt * 3);

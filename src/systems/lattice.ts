@@ -6,6 +6,7 @@
  * cube is in key. Touch a cube to play it. With the arpeggiator on, touching
  * a cube latches it instead, and the arp cycles through every latched cube
  * in time with the tempo: tap a few cubes and you have a pattern.
+ * The cube under your fingertip (or mouse) shows its note name.
  */
 import {
   AdditiveBlending,
@@ -15,6 +16,7 @@ import {
   EdgesGeometry,
   Float32BufferAttribute,
   Group,
+  Hovered,
   LineBasicMaterial,
   LineSegments,
   Mesh,
@@ -25,7 +27,7 @@ import {
   VisibilityState,
 } from '@iwsdk/core';
 import { audio } from '../audio/engine.js';
-import { noteFreq } from '../audio/scale.js';
+import { noteFreq, noteName } from '../audio/scale.js';
 import { LatticeCell } from '../resonance-components.js';
 import { COLORS, fxAt, setShown, stage, trace } from '../stage.js';
 import { Label } from '../visuals/textures.js';
@@ -42,7 +44,10 @@ const LOOKAHEAD = 0.1;
 
 export class LatticeSystem extends createSystem({
   pressed: { required: [LatticeCell, Pressed] },
+  hovered: { required: [LatticeCell, Hovered] },
 }) {
+  private tag!: Label;
+  private tagCell = -1;
   private group = new Group();
   private mats: MeshBasicMaterial[] = [];
   private cubes: Mesh[] = [];
@@ -110,6 +115,9 @@ export class LatticeSystem extends createSystem({
     this.status = new Label('', 0.03, '#ffffff');
     this.status.sprite.position.set(0, 0.16, 0);
     g.add(this.status.sprite);
+    this.tag = new Label('', 0.022, '#ffffff');
+    this.tag.opacity = 0;
+    g.add(this.tag.sprite);
     setShown(g, false);
 
     this.cleanupFuncs.push(
@@ -151,7 +159,7 @@ export class LatticeSystem extends createSystem({
     }
     const c = this.cubes[id].position;
     const p = this.group.position;
-    fxAt(stage.stations.lattice, p.x + c.x, p.y + c.y, p.z + c.z, NOTE_COLORS[id % COLS], 0.12, 0);
+    fxAt(stage.stations.lattice, p.x + c.x, p.y + c.y, p.z + c.z, NOTE_COLORS[id % COLS], 0.06 + velocity * 0.08, Math.round(2 + velocity * 6));
   }
 
   private detectHands(rawDt: number): void {
@@ -229,6 +237,21 @@ export class LatticeSystem extends createSystem({
     if (!visible) return;
     const dt = Math.min(delta, 0.05);
     if (active && this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectHands(delta);
+    // Note-name tag over the cube a finger is in, else the hovered one.
+    let tagCell = this.handCell[1] >= 0 ? this.handCell[1] : this.handCell[0];
+    if (tagCell < 0) for (const e of this.queries.hovered.entities) tagCell = e.getValue(LatticeCell, 'id') ?? -1;
+    if (tagCell !== this.tagCell) {
+      this.tagCell = tagCell;
+      if (tagCell >= 0) {
+        const col = tagCell % COLS;
+        const row = Math.floor(tagCell / COLS) % ROWS;
+        const back = tagCell >= COLS * ROWS;
+        this.tag.set(`${noteName(col + 5 * (row - 1))} ${back ? 'bell' : 'synth'}`);
+        this.tag.sprite.position.copy(this.cubes[tagCell].position);
+        this.tag.sprite.position.y += SIZE * 0.5 + 0.018;
+      }
+    }
+    this.tag.opacity = tagCell >= 0 ? 1 : 0;
     for (let id = 0; id < CELLS; id++) {
       this.flash[id] = Math.max(0, this.flash[id] - dt * 3);
       const held = id === this.handCell[0] || id === this.handCell[1];

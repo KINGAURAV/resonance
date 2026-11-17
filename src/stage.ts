@@ -75,6 +75,8 @@ export const stage = {
   /** Root-local positions of the two string ends. */
   stringEnds: [new Vector3(-0.13, 0.02, 0.25), new Vector3(0.13, 0.02, 0.25)],
   bpm: 96,
+  /** One-line looper state for the studio status line. */
+  loopStatus: 'Loop: empty',
   /** Tutorial step: 0 touch, 1 string, 2 sequencer, 3 free play. */
   tutorialStep: 0,
   /** Simple event hooks (set by the systems that own the behaviour). */

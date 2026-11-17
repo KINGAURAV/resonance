@@ -2,8 +2,10 @@
  * DrumSystem: a five-pad kit played with bare hands, plus "Learn a beat".
  *
  * Free play: strike any pad with a fingertip; faster strikes are louder.
- * Learn mode: a ring closes in on the pad you should hit and lands exactly
- * on the beat. Hits are judged against the audio clock, so the feedback is
+ * Learn mode: each new lesson first plays itself once ("Listen") while the
+ * rings show which pad sounds; then it is your turn. A ring closes in on the
+ * pad you should hit and lands exactly on the beat, and every hit is marked
+ * Early, Perfect or Late. Hits are judged against the audio clock, so the feedback is
  * about your timing, not the frame rate. Three short lessons build one groove.
  */
 import {
@@ -64,6 +66,7 @@ const HIT_WINDOW = 0.17; // seconds either side of the beat that still counts
 const LEAD = 0.9; // seconds a guide ring is visible before its beat
 const PASS_MARK = 0.7;
 const GUIDES = 6;
+const PERFECT = 0.06; // seconds either side that count as "Perfect"
 
 interface PadState {
   def: PadDef;
@@ -99,6 +102,10 @@ export class DrumSystem extends createSystem({
   private clicksScheduled = 0;
   private hits = 0;
   private resumeIn = -1; // pause between attempts (seconds)
+  private demo = false; // true while the lesson plays itself to you
+  private demoNext = false;
+  private feel!: Label;
+  private feelAlpha = 0;
 
   init(): void {
     this.kit.name = 'DrumKit';
@@ -145,6 +152,10 @@ export class DrumSystem extends createSystem({
     this.status = new Label('', 0.034, '#ffffff');
     this.status.sprite.position.set(0, 0.25, -0.08);
     this.kit.add(this.status.sprite);
+    this.feel = new Label('', 0.03, '#ffffff');
+    this.feel.sprite.position.set(0, 0.21, -0.08);
+    this.feel.opacity = 0;
+    this.kit.add(this.feel.sprite);
     setShown(this.kit, false);
 
     this.cleanupFuncs.push(
@@ -160,7 +171,7 @@ export class DrumSystem extends createSystem({
     this.learning = true;
     this.lesson = 0;
     stage.setPebbleLabel('learn', 'Stop lesson');
-    this.beginAttempt();
+    this.beginAttempt(true);
   }
 
   private stopLearning(message: string): void {
@@ -172,18 +183,23 @@ export class DrumSystem extends createSystem({
   }
 
   /** Start (or restart) the current lesson after a four-click count-in. */
-  private beginAttempt(): void {
+  private beginAttempt(demo = false): void {
+    this.demo = demo;
     this.noteState.fill(0);
     this.hits = 0;
     this.clicksScheduled = -4; // four count-in clicks before step 0
     this.startTime = audio.now + 4 * STEP * 2 + 0.1;
     this.resumeIn = -1;
-    this.status.set(LESSONS[this.lesson].name);
-    stage.toast('Hit when the ring lands');
+    this.status.set(demo ? `${LESSONS[this.lesson].name}: listen` : `${LESSONS[this.lesson].name}: your turn`);
+    stage.toast(demo ? 'Listen and watch the rings first' : 'Hit when the ring lands');
     trace('lesson', this.lesson, 'start', this.startTime.toFixed(2));
   }
 
   private finishAttempt(): void {
+    if (this.demo) {
+      this.beginAttempt(false);
+      return;
+    }
     const steps = LESSONS[this.lesson].steps;
     let total = 0;
     for (let n = 0; n < PASS_STEPS; n++) if (steps[n % steps.length] >= 0) total++;
@@ -197,6 +213,7 @@ export class DrumSystem extends createSystem({
       }
       this.lesson++;
       this.status.set(`Nice! ${this.hits}/${total}`);
+      this.demoNext = true;
     } else {
       this.status.set(`${this.hits}/${total} - try again`);
     }
@@ -213,11 +230,13 @@ export class DrumSystem extends createSystem({
     this.local.copy(p);
     stage.stations.drums.localToWorld(this.local);
     audio.play(pad.def.voice, 0, { velocity, live: true, x: this.local.x, y: this.local.y, z: this.local.z });
-    pad.pulse = 1;
+    // Harder hits flash brighter, ripple wider and throw more sparks.
+    pad.pulse = 0.45 + velocity * 0.55;
     let judged = '';
-    if (this.learning && this.resumeIn < 0) judged = this.judge(id) ? 'hit' : 'stray';
+    if (this.learning && !this.demo && this.resumeIn < 0) judged = this.judge(id) ? 'hit' : 'stray';
     const color = judged === 'hit' ? COLORS.mint : pad.def.color;
-    fxAt(stage.stations.drums, p.x, p.y + 0.005, p.z, color, pad.def.radius * (judged === 'hit' ? 5 : 3.2), judged === 'hit' ? 14 : 7);
+    const size = judged === 'hit' ? 5 : 2.2 + velocity * 2;
+    fxAt(stage.stations.drums, p.x, p.y + 0.005, p.z, color, pad.def.radius * size, judged === 'hit' ? 14 : Math.round(3 + velocity * 9));
     trace('drum', pad.def.name, velocity.toFixed(2), judged);
   }
 
@@ -235,9 +254,15 @@ export class DrumSystem extends createSystem({
         best = n;
       }
     }
-    if (best < 0) return false;
+    if (best < 0) {
+      this.showFeel('Not yet', '#ff8899');
+      return false;
+    }
     this.noteState[best] = 1;
     this.hits++;
+    const early = this.startTime + best * STEP - t; // > 0: you were early
+    if (Math.abs(early) <= PERFECT) this.showFeel('Perfect', '#6bffc0');
+    else this.showFeel(early > 0 ? 'Early' : 'Late', '#ffc86b');
     return true;
   }
 
@@ -268,11 +293,20 @@ export class DrumSystem extends createSystem({
     }
   }
 
+  private showFeel(text: string, color: string): void {
+    this.feel.setColor(color);
+    this.feel.set(text);
+    this.feelAlpha = 1;
+  }
+
   private updateLesson(dt: number): void {
     const now = audio.now;
     if (this.resumeIn >= 0) {
       this.resumeIn -= dt;
-      if (this.resumeIn < 0) this.beginAttempt();
+      if (this.resumeIn < 0) {
+        this.beginAttempt(this.demoNext);
+        this.demoNext = false;
+      }
       return;
     }
     const steps = LESSONS[this.lesson].steps;
@@ -293,6 +327,16 @@ export class DrumSystem extends createSystem({
       const padId = steps[n % steps.length];
       if (padId < 0 || this.noteState[n] !== 0) continue;
       const until = this.startTime + n * STEP - now;
+      if (this.demo && until < 0.12) {
+        // Demo: the kit plays the note itself, exactly on time.
+        const pad = this.pads[padId];
+        this.local.copy(pad.object.position);
+        stage.stations.drums.localToWorld(this.local);
+        audio.play(pad.def.voice, 0, { when: Math.max(now, this.startTime + n * STEP), velocity: 0.75, x: this.local.x, y: this.local.y, z: this.local.z });
+        this.noteState[n] = 1;
+        pad.pulse = 1;
+        continue;
+      }
       if (until < -HIT_WINDOW) {
         this.noteState[n] = 2; // missed
         const p = this.pads[padId].object.position;
@@ -332,6 +376,8 @@ export class DrumSystem extends createSystem({
     const dt = Math.min(delta, 0.05);
     if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectStrikes(delta);
     if (this.learning) this.updateLesson(dt);
+    this.feelAlpha = Math.max(0, this.feelAlpha - dt * 1.2);
+    this.feel.opacity = this.feelAlpha;
     for (let id = 0; id < this.pads.length; id++) {
       const pad = this.pads[id];
       grabOnly(pad.object);
@@ -340,7 +386,7 @@ export class DrumSystem extends createSystem({
       pad.pulse = Math.max(0, pad.pulse - dt * (pad.cymbal ? 1.6 : 4));
       pad.mat.emissiveIntensity = 0.1 + pad.pulse * (pad.cymbal ? 0.9 : 1.6);
       // Cymbals rock on their stand after a hit; drums stay put.
-      if (pad.cymbal) pad.model.rotation.z = Math.sin(time * 34) * pad.pulse * 0.1;
+      if (pad.cymbal) pad.model.rotation.z = Math.sin(time * 34) * pad.pulse * 0.14;
     }
   }
 }

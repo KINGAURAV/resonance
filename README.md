@@ -16,19 +16,26 @@ Competition 2026 — Entertainment track, New Experience division.
   plucking near an end sounds brighter.
 - **Drop a resonator on an orbit** around the core to add it to an 8-step loop.
 - Poke the floating pebbles: Pause/Play, Beat, Slower/Faster, Save, Load,
-  Reset, Replay intro.
+  Reset (tap twice to confirm), Replay intro. A status line above the controls
+  shows tempo, key, time signature and the loop state.
 
-- Poke **Drums** to swap to a five-pad hand drum kit. **Learn a beat** runs
-  three short lessons: a ring closes on the pad to hit and lands on the beat;
-  hits are scored against the audio clock.
-- Poke **Guitar** for an air guitar: touch a chord block on the neck (C, G, Am,
-  F) and strum across the six strings. **Learn a song** runs three lessons that
-  end in a four-chord song.
-- **Record loop** captures what you play on any instrument (two bars, starting
-  on your first note) and loops it; **Add layer** overdubs. The loop keeps
-  playing while you switch instruments.
+- **Drums**: a five-pad hand drum kit; harder hits are louder, brighter and
+  throw more sparks. **Learn a beat** runs three short lessons. Each new
+  lesson plays itself once while you watch, then it is your turn: a ring
+  closes on the pad to hit and lands on the beat, and every hit is marked
+  Early, Perfect or Late against the audio clock.
+- **Guitar**: touch a chord block on the neck (C, G, Am, F) and strum across
+  the six strings. Downstrokes sound full, upstrokes lighter and brighter.
+  **Learn a song** runs three lessons that end in a four-chord song, with an
+  arrow showing which way to strum and timing feedback on every strum.
+- **Record loop** counts in four clicks (with a big 4-3-2-1), records two bars
+  of whatever you play on any instrument, and loops it. **Add layer** overdubs
+  from the next downbeat after a count-in; **Undo layer** removes the newest
+  layer; **Snap** (on by default) moves notes to the nearest sixteenth. The
+  loop keeps playing while you turn to other instruments.
 - Poke **Lattice** for a block of 30 note cubes (five notes x three octaves x
-  two timbres). Touch cubes to play; with **Arp** on, cubes latch and the
+  two timbres). Touch cubes to play (the cube under your finger shows its note
+  name); with **Arp** on, cubes latch and the
   arpeggiator cycles through them in tempo.
 - Poke **Glide synth**: pinch to hold a note, slide sideways to change pitch,
   raise or lower the hand to brighten or mellow the tone. Two hands = two
