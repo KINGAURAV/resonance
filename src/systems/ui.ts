@@ -9,7 +9,6 @@ import {
   Hovered,
   Mesh,
   MeshStandardMaterial,
-  PokeInteractable,
   Pressed,
   RayInteractable,
   SphereGeometry,
@@ -36,6 +35,14 @@ interface PebbleState {
 const ARC: StudioMode[] = ['lattice', 'drums', 'playground', 'piano', 'guitar', 'glide'];
 const DONE_KEY = 'resonance.introDone';
 const CONFIRM_MS = 3000;
+const PRESS_R = 0.03; // fingertip this close to a pebble centre presses it
+const PRESS_RE = 0.055; // and must move this far away to press it again
+/** Rays still work on pebbles; the fingertip touch pointer must not. */
+const NO_TOUCH = { deny: ['touch'] };
+function noTouch(obj: Group): void {
+  const o = obj as Group & { pointerEventsType?: unknown };
+  if (o.pointerEventsType !== NO_TOUCH) o.pointerEventsType = NO_TOUCH;
+}
 const HINTS = ['Touch to create sound', 'Grab. Stretch. Pluck.', 'Create your rhythm: drop a shape on an orbit', ''];
 
 // Left column = performance, right column = composition.
@@ -64,6 +71,8 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['pianoLabels', 'Labels: on', 1, 1, 'piano'],
   ['pianoScale', 'Scale: off', 1, 2, 'piano'],
   ['pianoChord', 'Chord: off', 1, 3, 'piano'],
+  ['pianoLearn', 'Learn a song', 1, 4, 'piano'],
+  ['pianoSong', 'Song: Twinkle Twinkle', 1, 7, 'piano'],
   ['prev', '< Instrument', -1, 6, 'all'],
   ['next', 'Instrument >', 1, 6, 'all'],
   ['loop', 'Record loop', -1, 4, 'all'],
@@ -84,18 +93,14 @@ export class UISystem extends createSystem({
   private look = new Vector3();
   private headPos = new Vector3();
   private tipPos = new Vector3();
-  private waveSide = [0, 0];
-  private waveY = [0, 0];
-  private waveRun = [0, 0];
-  private waveSpeed = [0, 0];
-  private waveCooldown = 0;
+  private pokeArmed = new Uint8Array(128).fill(1);
   private clearArmedAt = -1; // Reset needs a second tap within CONFIRM_MS
   private statusTop!: Label;
   private statusLoop!: Label;
   private statusIn = 0;
 
   init(): void {
-    const geo = new SphereGeometry(0.017, 20, 14);
+    const geo = new SphereGeometry(0.02, 20, 14);
     for (const [action, text, side, row, mode] of PEBBLES) {
       const object = new Group();
       object.name = `Pebble ${action}`;
@@ -118,8 +123,7 @@ export class UISystem extends createSystem({
       );
       const e = this.world.createTransformEntity(object, { parent: stage.uiEntity! });
       e.addComponent(Pebble, { action });
-      e.addComponent(RayInteractable);
-      e.addComponent(PokeInteractable);
+      e.addComponent(RayInteractable); // mouse, and pinch-ray from a distance
       this.pebbles.push({ action, mode, object, mat, label, pulse: 0 });
     }
 
@@ -135,11 +139,7 @@ export class UISystem extends createSystem({
 
     this.cleanupFuncs.push(
       this.queries.pressed.subscribe('qualify', (entity) => {
-        const now = performance.now();
-        if (now - this.lastPress < 250) return; // one press per poke
-        this.lastPress = now;
-        audio.start();
-        this.run(entity.getValue(Pebble, 'action') ?? '');
+        this.press(entity.getValue(Pebble, 'action') ?? '');
       }),
     );
 
@@ -201,7 +201,7 @@ export class UISystem extends createSystem({
       } catch {
         /* ignore */
       }
-      stage.toast(this.world.visibilityState.peek() !== VisibilityState.NonImmersive ? 'Wave a hand at head height for more instruments' : 'Use the Instrument arrows for more instruments');
+      stage.toast(this.world.visibilityState.peek() !== VisibilityState.NonImmersive ? 'Poke the Instrument arrows for more instruments' : 'Use the Instrument arrows for more instruments');
     }
   }
 
@@ -293,55 +293,43 @@ export class UISystem extends createSystem({
   }
 
   /**
-   * Wave to change instrument: sweep an open hand sideways at about chin
-   * height or above (wave left = next instrument, wave right = previous).
-   * Every instrument is played lower down, so playing never counts as a
-   * wave; a pinch (Glide synth, grabbing) never counts either. After a
-   * switch the return stroke of the wave is ignored.
+   * Fingertip presses. The SDK's poke pointer was unreliable on these small
+   * pebbles (missed or doubled presses), so the pebbles do their own check,
+   * like the instruments: a fingertip within PRESS_R of a pebble presses it
+   * once, and it must move PRESS_RE away before that pebble can fire again.
    */
-  private detectWave(dt: number): void {
-    this.player.head.getWorldPosition(this.headPos);
-    this.player.head.getWorldDirection(this.look); // +Z; the view looks the other way
-    // The head's right-hand direction on the floor plane.
-    const len = Math.hypot(this.look.x, this.look.z) || 1;
-    const rx = this.look.z / len;
-    const rz = -this.look.x / len;
+  private detectPokes(): void {
     const sides = ['left', 'right'] as const;
     for (let h = 0; h < 2; h++) {
       this.player.indexTipSpaces[sides[h]].getWorldPosition(this.tipPos);
-      const side = (this.tipPos.x - this.headPos.x) * rx + (this.tipPos.z - this.headPos.z) * rz;
-      const y = this.tipPos.y;
-      const dSide = side - this.waveSide[h];
-      const dY = y - this.waveY[h];
-      this.waveSide[h] = side;
-      this.waveY[h] = y;
-      const high = y > this.headPos.y - 0.17;
-      const pinching = this.input.xr.gamepads[sides[h]]?.getSelecting() ?? false;
-      if (!high || pinching || this.waveCooldown > 0 || dt <= 0) {
-        this.waveRun[h] = 0;
-        this.waveSpeed[h] = 0;
-        continue;
-      }
-      // Smoothed sideways speed (hand poses arrive in steps, so raw speed
-      // flickers between zero and double).
-      const vs = dSide / dt;
-      this.waveSpeed[h] += (vs - this.waveSpeed[h]) * 0.5;
-      const v = this.waveSpeed[h];
-      const mostlySideways = Math.abs(dSide) >= Math.abs(dY) * 0.8;
-      if (Math.abs(v) < 0.25 || !mostlySideways) {
-        this.waveRun[h] *= 0.8; // a pause or a vertical move fades the stroke
-        if (Math.abs(this.waveRun[h]) < 0.01) this.waveRun[h] = 0;
-        continue;
-      }
-      // Add up travel while the hand keeps going the same way.
-      if (Math.sign(dSide) !== Math.sign(this.waveRun[h]) && this.waveRun[h] !== 0) this.waveRun[h] = 0;
-      this.waveRun[h] += dSide;
-      if (Math.abs(this.waveRun[h]) > 0.13) {
-        this.step(this.waveRun[h] < 0 ? 1 : -1);
-        this.waveCooldown = 0.9;
-        this.waveRun[0] = this.waveRun[1] = 0;
+      for (let i = 0; i < this.pebbles.length; i++) {
+        const p = this.pebbles[i];
+        noTouch(p.object);
+        const k = h * this.pebbles.length + i;
+        if (!p.object.visible) {
+          this.pokeArmed[k] = 1;
+          continue;
+        }
+        p.object.getWorldPosition(this.headPos);
+        const d = this.headPos.distanceTo(this.tipPos);
+        if (d > PRESS_RE) this.pokeArmed[k] = 1;
+        else if (d < PRESS_R && this.pokeArmed[k]) {
+          this.pokeArmed[k] = 0;
+          this.press(p.action);
+        }
       }
     }
+  }
+
+  /** One press of a pebble, from a fingertip, a ray or the mouse. */
+  private press(action: string): void {
+    const now = performance.now();
+    if (now - this.lastPress < 300) return; // never double-fire
+    this.lastPress = now;
+    audio.start();
+    // A crisp tick so you always know the press registered.
+    audio.play('click', 2400, { velocity: 0.3, x: this.tipPos.x, y: this.tipPos.y, z: this.tipPos.z });
+    this.run(action);
   }
 
   update(delta: number, time: number): void {
@@ -351,8 +339,7 @@ export class UISystem extends createSystem({
       this.wasImmersive = immersive;
       this.applyVisibility();
     }
-    this.waveCooldown = Math.max(0, this.waveCooldown - dt);
-    if (immersive && stage.tutorialStep >= 3) this.detectWave(delta);
+    if (immersive) this.detectPokes();
     if (this.advanceIn >= 0) {
       this.advanceIn -= dt;
       if (this.advanceIn < 0) this.setStep(stage.tutorialStep + 1);

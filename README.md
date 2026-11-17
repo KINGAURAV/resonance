@@ -41,11 +41,9 @@ Competition 2026 — Entertainment track, New Experience division.
   raise or lower the hand to brighten or mellow the tone. Two hands = two
   voices; **Chords** makes each pinch a three-note chord.
 - Drum pads can be pinched and moved to build your own kit layout.
-- One instrument at a time sits in front of you. To change instrument in VR,
-  **wave**: sweep an open hand sideways at about head height (wave left for
-  the next instrument, right for the previous). Instruments are played lower
-  down, so playing never counts as a wave. The `< Instrument` /
-  `Instrument >` pebbles do the same, in VR and in the desktop preview.
+- One instrument at a time sits in front of you. Poke the `< Instrument` /
+  `Instrument >` pebbles to change instrument. Every pebble press clicks so
+  you know it registered.
 - **Piano**: 24 keys (two octaves, C3-B4 to start) played with all ten
   fingertips; quicker presses are louder, notes ring while held. Pebbles:
   Octave -/+, Sustain, Volume, Sound (Grand / Electric / Soft), note Labels,
@@ -53,6 +51,10 @@ Competition 2026 — Entertainment track, New Experience division.
   brighter) and Chord guide (C, G, Am, F, Dm, Em: the chord's keys glow gold
   and it celebrates when you hold all three). Piano notes are recorded into
   the loop with how long you held them.
+- **Piano: Learn a song**: tiles fall onto the keys in time with the tune
+  (Twinkle Twinkle, Ode to Joy, Jingle Bells, all public domain); press each
+  key as its tile lands. The next key glows gold, the song waits if you miss
+  a note, and you get an on-time score at the end.
 - **Hold guitar** (VR): the guitar comes into your hands. The body rests in
   front of your stomach and the neck follows your left hand; slide the left
   hand along the neck to change chord and strum over the body with your right.

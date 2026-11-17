@@ -14,13 +14,20 @@
  *
  * Controls (pebbles): octave down/up, sustain, volume, sound (grand,
  * electric, soft), note labels, scale highlight, chord guide.
+ *
+ * Learn a song: glowing tiles fall onto the keys in time with the tune, and
+ * you press each key as its tile lands. The song waits for you if you miss
+ * one (so beginners can go at their own pace) and scores how many notes you
+ * played on time. Songs are public-domain melodies.
  */
 import {
+  AdditiveBlending,
   BoxGeometry,
   createSystem,
   Group,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Pressed,
   RayInteractable,
@@ -68,6 +75,53 @@ const CHORDS: { name: string; notes: number[] }[] = [
   { name: 'E minor', notes: [4, 7, 11] },
 ];
 
+// Public-domain melodies as "note:beats" (r = rest). Octave 4 = middle C.
+const SONGS: { name: string; bpm: number; notes: string }[] = [
+  {
+    name: 'Twinkle Twinkle',
+    bpm: 84,
+    notes: 'C4:1 C4:1 G4:1 G4:1 A4:1 A4:1 G4:2 F4:1 F4:1 E4:1 E4:1 D4:1 D4:1 C4:2 ' +
+      'G4:1 G4:1 F4:1 F4:1 E4:1 E4:1 D4:2 G4:1 G4:1 F4:1 F4:1 E4:1 E4:1 D4:2 ' +
+      'C4:1 C4:1 G4:1 G4:1 A4:1 A4:1 G4:2 F4:1 F4:1 E4:1 E4:1 D4:1 D4:1 C4:2',
+  },
+  {
+    name: 'Ode to Joy',
+    bpm: 96,
+    notes: 'E4:1 E4:1 F4:1 G4:1 G4:1 F4:1 E4:1 D4:1 C4:1 C4:1 D4:1 E4:1 E4:1.5 D4:0.5 D4:2 ' +
+      'E4:1 E4:1 F4:1 G4:1 G4:1 F4:1 E4:1 D4:1 C4:1 C4:1 D4:1 E4:1 D4:1.5 C4:0.5 C4:2',
+  },
+  {
+    name: 'Jingle Bells',
+    bpm: 108,
+    notes: 'E4:1 E4:1 E4:2 E4:1 E4:1 E4:2 E4:1 G4:1 C4:1.5 D4:0.5 E4:4 ' +
+      'F4:1 F4:1 F4:1.5 F4:0.5 F4:1 E4:1 E4:1 E4:0.5 E4:0.5 E4:1 D4:1 D4:1 E4:1 D4:2 G4:2 ' +
+      'E4:1 E4:1 E4:2 E4:1 E4:1 E4:2 E4:1 G4:1 C4:1.5 D4:0.5 E4:4 ' +
+      'F4:1 F4:1 F4:1.5 F4:0.5 F4:1 E4:1 E4:1 E4:0.5 E4:0.5 G4:1 G4:1 F4:1 D4:1 C4:4',
+  },
+];
+const LETTER: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+/** Parse "E4:1.5" tokens into MIDI note, start and length (seconds). */
+function parseSong(text: string, bpm: number): { midi: number; t: number; dur: number }[] {
+  const beat = 60 / bpm;
+  const out: { midi: number; t: number; dur: number }[] = [];
+  let t = 0;
+  for (const tok of text.trim().split(/\s+/)) {
+    const [n, b] = tok.split(':');
+    const len = parseFloat(b) * beat;
+    if (n !== 'r') {
+      const sharp = n[1] === '#' ? 1 : 0;
+      const midi = 12 * (parseInt(n.slice(1 + sharp), 10) + 1) + LETTER[n[0]] + sharp;
+      out.push({ midi, t, dur: len });
+    }
+    t += len;
+  }
+  return out;
+}
+const TILE_SPEED = 0.11; // metres a tile falls per second
+const TILE_LEAD = 2.6; // seconds a tile is visible before it lands
+const TILES = 18;
+const ON_TIME = 0.3; // seconds early/late that still counts as on time
+
 interface KeyState {
   semi: number; // 0..23 above the lowest C
   black: boolean;
@@ -114,6 +168,17 @@ export class PianoSystem extends createSystem({
   private tagAlpha = 0;
   private chordDone = -1;
   private wasActive = false;
+
+  // Learn a song.
+  private song = 0;
+  private learning = false;
+  private notes: { midi: number; t: number; dur: number }[] = [];
+  private songTime = 0;
+  private next = 0; // index of the next note to play
+  private waited = 0; // seconds the song has been waiting on the next note
+  private onTime = 0;
+  private tiles: Mesh[] = [];
+  private tileMats: MeshBasicMaterial[] = [];
 
   init(): void {
     const g = this.piano;
@@ -164,6 +229,16 @@ export class PianoSystem extends createSystem({
     this.tag = new Label('', 0.03, '#ffffff');
     this.tag.opacity = 0;
     g.add(this.tag.sprite);
+    // Pool of note tiles for Learn a song.
+    const tileGeo = new BoxGeometry(1, 1, 1);
+    for (let i = 0; i < TILES; i++) {
+      const m = new MeshBasicMaterial({ color: COLORS.cyan, transparent: true, opacity: 0.75, blending: AdditiveBlending, depthWrite: false });
+      const tile = decor(new Mesh(tileGeo, m));
+      tile.visible = false;
+      this.tiles.push(tile);
+      this.tileMats.push(m);
+      g.add(tile);
+    }
     setShown(g, false);
 
     this.cleanupFuncs.push(
@@ -180,6 +255,13 @@ export class PianoSystem extends createSystem({
     );
 
     const a = stage.actions;
+    a.pianoLearn = () => (this.learning ? this.stopSong('Song stopped') : this.startSong());
+    a.pianoSong = () => {
+      this.song = (this.song + 1) % SONGS.length;
+      stage.setPebbleLabel('pianoSong', `Song: ${SONGS[this.song].name}`);
+      if (this.learning) this.startSong();
+      else this.say(`${SONGS[this.song].name}: press Learn a song to start`);
+    };
     a.pianoDown = () => this.shift(-12);
     a.pianoUp = () => this.shift(12);
     a.pianoSustain = () => {
@@ -273,6 +355,89 @@ export class PianoSystem extends createSystem({
     this.say(`Keys from ${this.noteName(this.keys[0])} to ${this.noteName(this.keys[KEYS - 1])}`);
   }
 
+  private startSong(): void {
+    audio.start();
+    const s = SONGS[this.song];
+    this.notes = parseSong(s.notes, s.bpm);
+    // The songs sit between C3 and B4: make sure those keys are showing.
+    if (this.base !== 48) {
+      this.releaseAll();
+      this.base = 48;
+      this.refreshLabels();
+    }
+    this.learning = true;
+    this.songTime = -TILE_LEAD; // first tile starts at the top
+    this.next = 0;
+    this.waited = 0;
+    this.onTime = 0;
+    stage.setPebbleLabel('pianoLearn', 'Stop song');
+    this.say(`${s.name}: press each key as its tile lands`);
+    trace('piano song', s.name, this.notes.length, 'notes');
+  }
+
+  private stopSong(message: string): void {
+    this.learning = false;
+    for (const t of this.tiles) t.visible = false;
+    stage.setPebbleLabel('pianoLearn', 'Learn a song');
+    this.say(message);
+  }
+
+  /** Called on every key press while a song is running. */
+  private judgeSong(midi: number): void {
+    const n = this.notes[this.next];
+    if (!n || n.midi !== midi) return;
+    // Close enough to its landing time (or the song is waiting for it).
+    if (n.t - this.songTime > ON_TIME) return;
+    const early = n.t - this.songTime;
+    const good = this.waited < ON_TIME && early < ON_TIME;
+    if (good) this.onTime++;
+    this.next++;
+    this.waited = 0;
+    // Rejoin the beat from this note, so the next tiles keep their spacing.
+    this.songTime = Math.max(this.songTime, n.t - 0.05);
+    trace('song note', this.next, '/', this.notes.length, good ? 'on time' : 'late');
+    if (this.next >= this.notes.length) {
+      const total = this.notes.length;
+      fxAt(stage.stations.piano, 0, 0.1, this.piano.position.z, COLORS.gold, 0.25, 40);
+      this.stopSong(`${SONGS[this.song].name} complete! ${this.onTime}/${total} on time`);
+    }
+  }
+
+  private updateSong(dt: number, time: number): void {
+    const n = this.notes[this.next];
+    if (!n) return;
+    // The song waits on the next note until you play it.
+    if (this.songTime + dt >= n.t) {
+      this.waited += dt;
+      this.songTime = n.t;
+    } else this.songTime += dt;
+    if (this.waited > 1.2 && Math.floor(this.waited * 2) !== Math.floor((this.waited - dt) * 2)) {
+      this.status.set(`Play ${NAMES[n.midi % 12]}${Math.floor(n.midi / 12) - 1} - the gold key`);
+      this.statusAlpha = 1.5;
+    }
+    let used = 0;
+    for (let i = this.next; i < this.notes.length && used < TILES; i++) {
+      const note = this.notes[i];
+      const until = note.t - this.songTime;
+      if (until > TILE_LEAD) break;
+      const semi = note.midi - this.base;
+      if (semi < 0 || semi >= KEYS) continue;
+      const k = this.keys[semi];
+      const tile = this.tiles[used];
+      const mat = this.tileMats[used++];
+      const len = Math.max(0.012, note.dur * TILE_SPEED - 0.006);
+      const w = (k.black ? BLACK_W : WHITE_W) * 0.8;
+      tile.visible = true;
+      tile.scale.set(w, len, 0.012);
+      // The tile's bottom lands on the key top exactly when it should be played.
+      tile.position.set(k.x, (k.black ? BLACK_UP : 0) + 0.004 + until * TILE_SPEED + len / 2, k.black ? -0.045 : -0.035);
+      const isNext = i === this.next;
+      mat.color.setHex(isNext ? COLORS.gold : k.black ? COLORS.magenta : COLORS.cyan);
+      mat.opacity = isNext ? 0.75 + Math.sin(time * 10) * 0.2 : 0.55;
+    }
+    for (let i = used; i < TILES; i++) this.tiles[i].visible = false;
+  }
+
   private keyDown(id: number, velocity: number): void {
     const k = this.keys[id];
     k.fingers++;
@@ -295,6 +460,7 @@ export class PianoSystem extends createSystem({
       k.black ? COLORS.magenta : COLORS.cyan, 0.03 + velocity * 0.03, Math.round(1 + velocity * 4));
     trace('piano', this.noteName(k), velocity.toFixed(2));
     this.checkChord();
+    if (this.learning) this.judgeSong(midi);
   }
 
   private keyUp(id: number): void {
@@ -460,11 +626,16 @@ export class PianoSystem extends createSystem({
     if (active !== this.wasActive) {
       this.wasActive = active;
       if (active) this.say('Play with your fingertips');
-      else this.releaseAll(); // never leave notes hanging when you move on
+      else {
+        this.releaseAll(); // never leave notes hanging when you move on
+        if (this.learning) this.stopSong('');
+      }
     }
     if (!active) return;
     const dt = Math.min(delta, 0.05);
     if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectFingers(delta);
+    if (this.learning) this.updateSong(dt, time);
+    const want = this.learning && this.notes[this.next] ? this.notes[this.next].midi - this.base : -1;
 
     const scale = this.scale >= 0 ? SCALES[this.scale] : null;
     const chord = this.chord >= 0 ? CHORDS[this.chord] : null;
@@ -477,7 +648,11 @@ export class PianoSystem extends createSystem({
       // Gold = notes of the chord guide, cyan = in the chosen scale (root brighter).
       let hint = 0;
       let hintColor = COLORS.cyan;
-      if (chord && chord.notes.includes(pc)) {
+      if (k.semi === want) {
+        // Learn a song: the next key to play glows gold.
+        hint = 0.7 + Math.sin(time * 8) * 0.25;
+        hintColor = COLORS.gold;
+      } else if (chord && chord.notes.includes(pc)) {
         hint = 0.55 + Math.sin(time * 6) * 0.2;
         hintColor = COLORS.gold;
       } else if (scale && scale.steps.includes((pc - scale.root + 12) % 12)) {
