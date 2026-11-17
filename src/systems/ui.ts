@@ -1,17 +1,28 @@
 /**
- * UISystem: floating control pebbles, the guided intro, and the 2D title
- * overlay. There are no flat panels: every control is a small glowing object
- * you poke with a fingertip (or pinch-ray from a distance).
+ * UISystem: the control buttons, the guided intro, and the 2D title overlay.
+ *
+ * There are no flat panels. Each control is a small round button with an
+ * icon, colour-coded by purpose (see visuals/icons.ts), that you poke with a
+ * fingertip (or pinch-ray from a distance). Buttons swell when a finger
+ * comes near (hover), sink and click when pressed, and glow mint while their
+ * feature is switched on. Two big arrows on either side change instrument,
+ * labelled with the instrument they lead to. Less-used controls stay hidden
+ * until you press More, so each instrument starts simple.
  */
 import {
+  CircleGeometry,
   createSystem,
+  CylinderGeometry,
+  ExtrudeGeometry,
   Group,
   Hovered,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Pressed,
   RayInteractable,
-  SphereGeometry,
+  Shape,
+  TorusGeometry,
   Vector3,
   VisibilityState,
 } from '@iwsdk/core';
@@ -19,6 +30,7 @@ import { audio } from '../audio/engine.js';
 import { loadComposition, saveComposition } from '../composition.js';
 import { Pebble } from '../resonance-components.js';
 import { COLORS, setShown, stage, STATION_NAME, trace, type StudioMode } from '../stage.js';
+import { BUTTONS, iconTexture } from '../visuals/icons.js';
 import { glowSprite, Label } from '../visuals/textures.js';
 import { resetResonator } from './resonators.js';
 
@@ -26,10 +38,23 @@ interface PebbleState {
   action: string;
   mode: PebbleMode;
   object: Group;
+  /** The visible button, scaled for hover and pushed in when pressed. */
+  body: Group;
   mat: MeshStandardMaterial;
+  face: MeshBasicMaterial | null;
+  color: number;
   label: Label;
   pulse: number;
+  hover: number;
+  near: number; // hover target this frame (0 or 1)
 }
+
+// Less-used controls, shown only after pressing More.
+const ADVANCED = new Set([
+  'save', 'load', 'clear', 'loopClear', 'snap', 'arpClear',
+  'pianoSustain', 'pianoVolume', 'pianoLabels', 'pianoScale', 'pianoChord',
+]);
+const ON_COLOR = COLORS.mint;
 
 // Stations from left to right, for the desktop arrow pebbles.
 const ARC: StudioMode[] = ['lattice', 'drums', 'playground', 'piano', 'guitar', 'glide'];
@@ -76,8 +101,9 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['latticeLearn', 'Learn a song', 1, 0, 'lattice'],
   ['glideLearn', 'Learn a song', 1, 0, 'glide'],
   ['pianoSong', 'Song: Twinkle Twinkle', 1, 7, 'piano'],
-  ['prev', '< Instrument', -1, 6, 'all'],
-  ['next', 'Instrument >', 1, 6, 'all'],
+  ['prev', '', -1, 99, 'all'], // arrows: placed separately
+  ['next', '', 1, 99, 'all'],
+  ['more', 'More', -1, 6, 'all'],
   ['loop', 'Record loop', -1, 4, 'all'],
   ['loopClear', 'Clear loop', -1, 5, 'all'],
   ['loopUndo', 'Undo layer', 1, 5, 'all'],
@@ -101,33 +127,68 @@ export class UISystem extends createSystem({
   private statusTop!: Label;
   private statusLoop!: Label;
   private statusIn = 0;
+  private showMore = false;
 
   init(): void {
-    const geo = new SphereGeometry(0.02, 20, 14);
-    for (const [action, text, side, row, mode] of PEBBLES) {
+    const rimGeo = new CylinderGeometry(0.021, 0.021, 0.008, 28);
+    rimGeo.rotateX(Math.PI / 2); // flat face toward +z
+    const ringGeo = new TorusGeometry(0.0205, 0.0022, 8, 32);
+    const faceGeo = new CircleGeometry(0.016, 28);
+    // A chunky arrow, pointing +x; the left one is mirrored.
+    const arrowShape = new Shape();
+    arrowShape.moveTo(-0.032, -0.009);
+    arrowShape.lineTo(0.006, -0.009);
+    arrowShape.lineTo(0.006, -0.024);
+    arrowShape.lineTo(0.036, 0);
+    arrowShape.lineTo(0.006, 0.024);
+    arrowShape.lineTo(0.006, 0.009);
+    arrowShape.lineTo(-0.032, 0.009);
+    arrowShape.closePath();
+    const arrowGeo = new ExtrudeGeometry(arrowShape, { depth: 0.008, bevelEnabled: true, bevelSize: 0.002, bevelThickness: 0.002, bevelSegments: 2 });
+    arrowGeo.translate(0, 0, -0.004);
+
+    for (const [action, text, side, cell, mode] of PEBBLES) {
       const object = new Group();
       object.name = `Pebble ${action}`;
-      const color = mode === 'all' ? 0xff5a6e : mode !== 'playground' || action === 'drums' || action === 'guitar' || action === 'lattice' || action === 'glide' ? COLORS.gold : side < 0 ? COLORS.cyan : COLORS.violet;
+      const body = new Group();
+      // Tilted back so the face looks up at a seated player's eyes.
+      body.rotation.x = -0.6;
+      const arrow = action === 'prev' || action === 'next';
+      const def = BUTTONS[action] ?? { icon: 'more', color: COLORS.cyan };
+      const color = arrow ? COLORS.cyan : def.color;
       const mat = new MeshStandardMaterial({
-        color, emissive: color, emissiveIntensity: 0.5,
-        transparent: true, opacity: 0.85, roughness: 0.2, metalness: 0.2,
+        color: arrow ? color : 0x15152c, emissive: color, emissiveIntensity: arrow ? 0.7 : 0.25,
+        roughness: 0.3, metalness: 0.4,
       });
-      const mesh = new Mesh(geo, mat);
-      mesh.scale.y = 0.6;
+      let face: MeshBasicMaterial | null = null;
+      if (arrow) {
+        const m = new Mesh(arrowGeo, mat);
+        if (side < 0) m.rotation.z = Math.PI;
+        body.add(m);
+      } else {
+        const rim = new Mesh(rimGeo, mat);
+        const ring = new Mesh(ringGeo, new MeshBasicMaterial({ color }));
+        ring.position.z = 0.0042;
+        face = new MeshBasicMaterial({ map: iconTexture(def.icon), transparent: true, depthWrite: false });
+        const icon = new Mesh(faceGeo, face);
+        icon.position.z = 0.0045;
+        body.add(rim, ring, icon);
+      }
       const label = new Label(text, 0.017);
-      label.sprite.position.y = 0.034;
-      object.add(mesh, glowSprite(color, 0.06, 0.45), label.sprite);
-      // 2x2 grid per side, all at the same depth, so reaching for one pebble
-      // never sweeps a finger through another.
-      object.position.set(
-        side * (0.3 + (row % 2) * 0.075),
-        0.02 + Math.floor(row / 2) * 0.075,
-        0.1,
-      );
+      label.sprite.position.y = arrow ? -0.04 : 0.036;
+      object.add(body, glowSprite(color, arrow ? 0.11 : 0.06, arrow ? 0.4 : 0.35), label.sprite);
+      if (arrow) {
+        // Big arrows at the far left and right: always in the same place.
+        object.position.set(side * 0.49, 0.13, 0.07);
+      } else {
+        // 2-column grid per side, all at the same depth, so reaching for one
+        // button never sweeps a finger through another.
+        object.position.set(side * (0.3 + (cell % 2) * 0.075), 0.02 + Math.floor(cell / 2) * 0.075, 0.1);
+      }
       const e = this.world.createTransformEntity(object, { parent: stage.uiEntity! });
       e.addComponent(Pebble, { action });
       e.addComponent(RayInteractable); // mouse, and pinch-ray from a distance
-      this.pebbles.push({ action, mode, object, mat, label, pulse: 0 });
+      this.pebbles.push({ action, mode, object, body, mat, face, color, label, pulse: 0, hover: 0, near: 0 });
     }
 
     this.hint = new Label('', 0.024, '#ffffff');
@@ -220,10 +281,16 @@ export class UISystem extends createSystem({
     });
     for (const p of this.pebbles) {
       const inMode = p.mode === stage.mode || p.mode === 'all' || (p.mode === 'studio' && !play);
-      // Arrow pebbles: the button way to change instrument (swiping in VR).
       const arrow = p.action === 'prev' || p.action === 'next';
-      setShown(p.object, arrow ? step >= 3 : inMode && (!play || step >= 3 || p.action === 'intro'));
+      const basic = !ADVANCED.has(p.action) || this.showMore;
+      setShown(p.object, arrow || p.action === 'more' ? step >= 3 : basic && inMode && (!play || step >= 3 || p.action === 'intro'));
       if (p.action === 'intro') p.label.set(step >= 3 ? 'Replay intro' : 'Skip intro');
+      if (arrow) {
+        // Name the instrument the arrow leads to.
+        const i = ARC.indexOf(stage.mode) + (p.action === 'next' ? 1 : -1);
+        const name = STATION_NAME[ARC[(i + ARC.length) % ARC.length]];
+        p.label.set(p.action === 'next' ? `${name}  \u25B6` : `\u25C0  ${name}`);
+      }
     }
   }
 
@@ -235,9 +302,15 @@ export class UISystem extends createSystem({
     }
     trace('ui', action, 'slots', Array.from(stage.slots).join(','));
     switch (action) {
+      case 'more':
+        this.showMore = !this.showMore;
+        p?.label.set(this.showMore ? 'Less' : 'More');
+        this.applyVisibility();
+        break;
       case 'play':
         stage.playing = !stage.playing;
         p?.label.set(stage.playing ? 'Pause' : 'Play');
+        if (p?.face) p.face.map = iconTexture(stage.playing ? 'pause' : 'play');
         break;
       case 'beat':
         stage.beat = !stage.beat;
@@ -309,14 +382,17 @@ export class UISystem extends createSystem({
         const p = this.pebbles[i];
         noTouch(p.object);
         const k = h * this.pebbles.length + i;
+        if (h === 0) p.near = 0;
         if (!p.object.visible) {
           this.pokeArmed[k] = 1;
           continue;
         }
         p.object.getWorldPosition(this.headPos);
         const d = this.headPos.distanceTo(this.tipPos);
+        if (d < 0.08) p.near = 1; // hover: a finger is approaching
+        const r = p.action === 'prev' || p.action === 'next' ? PRESS_R + 0.012 : PRESS_R;
         if (d > PRESS_RE) this.pokeArmed[k] = 1;
-        else if (d < PRESS_R && this.pokeArmed[k]) {
+        else if (d < r && this.pokeArmed[k]) {
           this.pokeArmed[k] = 0;
           this.press(p.action);
         }
@@ -378,8 +454,18 @@ export class UISystem extends createSystem({
 
     for (const p of this.pebbles) {
       p.pulse = Math.max(0, p.pulse - dt * 3);
-      const on = (p.action === 'beat' && stage.beat) || (p.action === 'play' && stage.playing);
-      p.mat.emissiveIntensity = 0.45 + p.pulse * 2.5 + (on ? 0.5 + audio.level * 0.8 : 0);
+      p.hover += (p.near - p.hover) * (1 - Math.exp(-dt * 14));
+      // Hovered buttons swell; pressed ones sink in.
+      p.body.scale.setScalar(1 + p.hover * 0.18);
+      p.body.position.z = -p.pulse * 0.007;
+      // Mint while the feature is on (Beat, Sustain, Arp, recording...).
+      const t = p.label.value;
+      const on = p.action === 'beat' ? stage.beat
+        : p.action === 'play' ? false
+        : t.endsWith(': on') || t.startsWith('Stop') || t.startsWith('Recording') || t.startsWith('Adding') || t === 'Less';
+      // Recording stays red (red = recording); other features turn mint.
+      p.mat.emissive.setHex(on && p.action !== 'loop' ? ON_COLOR : p.color);
+      p.mat.emissiveIntensity = (p.face ? 0.25 : 0.7) + p.hover * 0.5 + p.pulse * 1.5 + (on ? 0.6 + audio.level * 0.6 : 0);
     }
   }
 }

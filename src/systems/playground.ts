@@ -482,14 +482,16 @@ export class PlaygroundSystem extends createSystem({}) {
     // Stations sit on an arc that spins so the active one is in front of
     // you (swipe or arrow pebbles to change). Pebbles follow the active one.
     const target = STATION_ANGLE[stage.mode];
-    stage.carousel += (target - stage.carousel) * (1 - Math.exp(-dt * 6));
+    // Switch instantly: swinging the world around a seated player is a
+    // comfort risk, so the new instrument simply appears in front of you.
+    stage.carousel = target;
     for (let i = 0; i < MODES.length; i++) {
       const mode = MODES[i];
       placeStation(stage.stations[mode], STATION_ANGLE[mode] - stage.carousel);
       const facing = mode === stage.mode;
       this.signs[i].opacity = stage.showAll ? (facing ? 0.95 : 0.55) : 0;
     }
-    this.uiAngle += (STATION_ANGLE[stage.mode] - stage.carousel - this.uiAngle) * (1 - Math.exp(-dt * 8));
+    this.uiAngle = STATION_ANGLE[stage.mode] - stage.carousel;
     placeStation(stage.uiStation, this.uiAngle);
 
     // Stage: keep the floor on the real floor (the root rides at seat height).

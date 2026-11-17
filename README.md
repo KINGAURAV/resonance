@@ -41,9 +41,15 @@ Competition 2026 — Entertainment track, New Experience division.
   raise or lower the hand to brighten or mellow the tone. Two hands = two
   voices; **Chords** makes each pinch a three-note chord.
 - Drum pads can be pinched and moved to build your own kit layout.
-- One instrument at a time sits in front of you. Poke the `< Instrument` /
-  `Instrument >` pebbles to change instrument. Every pebble press clicks so
-  you know it registered.
+- One instrument at a time sits in front of you. Poke the big cyan arrows
+  at the far left and right to change instrument; each is labelled with the
+  instrument it leads to. Instruments switch in place (no swinging around
+  you), for comfort.
+- Controls are round icon buttons, colour-coded by purpose: cyan play/tempo,
+  gold lessons, violet sound settings, red recording or destructive, mint
+  save/load. A button swells as your finger approaches, sinks and clicks
+  when pressed, and glows mint while its feature is on. Less-used controls
+  (save/load, reset, clear loop, snap, piano settings) appear after **More**.
 - **Piano**: 24 keys (two octaves, C3-B4 to start) played with all ten
   fingertips; quicker presses are louder, notes ring while held. Pebbles:
   Octave -/+, Sustain, Volume, Sound (Grand / Electric / Soft), note Labels,
@@ -99,6 +105,7 @@ On this machine Node 22 is installed side by side:
 | `src/systems/guitar.ts` | Air guitar: chord blocks, strum detection, learn-a-song lessons |
 | `src/systems/lattice.ts` | Note-cube lattice and arpeggiator |
 | `src/systems/glide.ts` | Pinch-to-play sustained synth |
+| `src/visuals/icons.ts` | Procedural button icons and colour categories |
 | `src/systems/coach.ts` | Shared listen-then-play song lesson (Lattice, Glide, Echo) |
 | `src/systems/echo.ts` | Playground Echo lesson |
 | `src/systems/piano.ts` | Two-octave piano: ten-finger key detection, sustain, sounds, scale and chord guides |

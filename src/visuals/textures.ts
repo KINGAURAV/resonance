@@ -97,6 +97,10 @@ export class Label {
     this.tex.needsUpdate = true;
   }
 
+  get value(): string {
+    return this.text;
+  }
+
   setColor(color: string): void {
     if (color === this.color) return;
     this.color = color;
