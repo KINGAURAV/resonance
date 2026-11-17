@@ -69,7 +69,7 @@ export class LatticeSystem extends createSystem({
   init(): void {
     const g = this.group;
     g.name = 'Lattice';
-    g.position.set(0, 0.13, 0.15);
+    g.position.set(0, 0.11, 0.15);
     const entity = this.world.createTransformEntity(g, { parent: stage.stationEntities.lattice });
 
     const box = new BoxGeometry(SIZE, SIZE, SIZE);

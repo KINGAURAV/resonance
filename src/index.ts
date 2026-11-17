@@ -5,6 +5,7 @@ import { GlideSystem } from './systems/glide.js';
 import { GuitarSystem } from './systems/guitar.js';
 import { LatticeSystem } from './systems/lattice.js';
 import { LooperSystem } from './systems/looper.js';
+import { PianoSystem } from './systems/piano.js';
 import { PlaygroundSystem } from './systems/playground.js';
 import { ResonatorSystem } from './systems/resonators.js';
 import { SequencerSystem } from './systems/sequencer.js';
@@ -25,6 +26,7 @@ World.create(
   world.registerSystem(GuitarSystem);
   world.registerSystem(LatticeSystem);
   world.registerSystem(GlideSystem);
+  world.registerSystem(PianoSystem);
   world.registerSystem(LooperSystem);
   world.registerSystem(UISystem);
 });

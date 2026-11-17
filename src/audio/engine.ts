@@ -22,7 +22,14 @@ export type VoiceKind =
   | 'hat'
   | 'tom'
   | 'crash'
-  | 'click'; // quiet metronome tick
+  | 'click' // quiet metronome tick
+  | 'piano' // grand piano (held notes: see pianoOn / pianoOff)
+  | 'epiano' // electric piano
+  | 'spiano'; // soft (felt) piano
+
+/** Piano sounds, in the order the piano's Sound pebble cycles through. */
+export const PIANO_KINDS: VoiceKind[] = ['piano', 'epiano', 'spiano'];
+export const isPiano = (k: VoiceKind) => k === 'piano' || k === 'epiano' || k === 'spiano';
 
 export interface PlayOptions {
   /** AudioContext time to start at. Defaults to "now". */
@@ -37,7 +44,20 @@ export interface PlayOptions {
   brightness?: number;
   /** True when a person just played this note (the looper records these). */
   live?: boolean;
+  /** Held instruments (piano): how long the key was down, in seconds. */
+  duration?: number;
 }
+
+/** One sounding piano note. */
+interface PianoNote {
+  id: number;
+  nodes: AudioScheduledSourceNode[];
+  gain: GainNode;
+  out: AudioNode[];
+  released: boolean;
+}
+
+const MAX_PIANO = 16;
 
 const MAX_VOICES = 28;
 
@@ -57,6 +77,9 @@ export class AudioEngine {
   private noise!: AudioBuffer;
   private spectrum = new Uint8Array(256);
   private activeVoices = 0;
+  private pianoNotes: PianoNote[] = [];
+  private pianoId = 0;
+  private pianoWaves: PeriodicWave[] = [];
   /** Called for every live (hand-played) note; used by the looper. */
   onLive: ((kind: VoiceKind, freq: number, opts: PlayOptions, time: number) => void) | null = null;
 
@@ -167,9 +190,22 @@ export class AudioEngine {
     this.level += (lvl - this.level) * (lvl > this.level ? 0.7 : 0.1);
   }
 
+  /** Report a note a person played that was not started through play(). */
+  emitLive(kind: VoiceKind, freq: number, opts: PlayOptions, time: number): void {
+    this.onLive?.(kind, freq, opts, time);
+  }
+
   play(kind: VoiceKind, freq: number, opts: PlayOptions = {}): void {
     const ctx = this.ctx;
-    if (!ctx || this.activeVoices >= MAX_VOICES) return;
+    if (!ctx) return;
+    if (isPiano(kind)) {
+      // Replayed piano notes (looper): a key press of known length.
+      const t = Math.max(opts.when ?? 0, ctx.currentTime + 0.003);
+      const id = this.pianoOn(kind, freq, opts.velocity ?? 0.8, opts.x ?? 0, opts.y ?? 1, opts.z ?? -0.5, t);
+      this.pianoOff(id, t + Math.max(0.05, opts.duration ?? 0.4));
+      return;
+    }
+    if (this.activeVoices >= MAX_VOICES) return;
     const t = Math.max(opts.when ?? 0, ctx.currentTime + 0.003);
     const vel = Math.min(1, Math.max(0.05, opts.velocity ?? 0.8));
     if (opts.live && this.onLive) this.onLive(kind, freq, opts, t);
@@ -259,6 +295,162 @@ export class AudioEngine {
   hold(): HeldVoice | null {
     if (!this.ctx) return null;
     return new HeldVoice(this.ctx, this.master, this.fxSend);
+  }
+
+  // ---- piano -----------------------------------------------------------
+
+  /** Harmonic spectra: a bright grand and a mellow felt piano. */
+  private pianoWave(i: number): PeriodicWave {
+    if (!this.pianoWaves[i]) {
+      const amps = i === 0
+        ? [0, 1, 0.7, 0.45, 0.35, 0.28, 0.18, 0.13, 0.09, 0.07, 0.05, 0.04, 0.03, 0.02]
+        : [0, 1, 0.38, 0.14, 0.07, 0.035, 0.015];
+      const real = new Float32Array(amps.length);
+      const imag = new Float32Array(amps);
+      this.pianoWaves[i] = this.ctx!.createPeriodicWave(real, imag);
+    }
+    return this.pianoWaves[i];
+  }
+
+  /**
+   * Start a piano note; it rings (and slowly decays, like a real string)
+   * until pianoOff. Returns an id for pianoOff, or -1 if audio is off.
+   *
+   * Grand / soft: a piano-like harmonic spectrum through a low-pass filter
+   * that closes as the note decays (high partials die first, as on a real
+   * piano), two slightly detuned strings, and a short felt-hammer thump.
+   * Electric: two-operator FM, the classic tine piano sound.
+   */
+  pianoOn(kind: VoiceKind, freq: number, velocity: number, x: number, y: number, z: number, when = 0): number {
+    const ctx = this.ctx;
+    if (!ctx) return -1;
+    // Polyphony cap: the oldest note gives way.
+    if (this.pianoNotes.length >= MAX_PIANO) this.pianoOff(this.pianoNotes[0].id, 0, 0.03);
+    const t = Math.max(when, ctx.currentTime + 0.002);
+    const vel = Math.min(1, Math.max(0.05, velocity));
+    // Lower notes ring longer, as on a real piano.
+    const ring = Math.min(3.2, Math.max(0.5, 1.7 * Math.sqrt(262 / freq)));
+    const stopAt = t + ring * 5 + 0.5;
+    const nodes: AudioScheduledSourceNode[] = [];
+
+    const gain = ctx.createGain();
+    const pan = ctx.createPanner();
+    pan.panningModel = 'equalpower';
+    pan.distanceModel = 'inverse';
+    pan.refDistance = 0.6;
+    pan.rolloffFactor = 0.5;
+    pan.positionX.value = x;
+    pan.positionY.value = y;
+    pan.positionZ.value = z;
+    const send = ctx.createGain();
+    gain.connect(pan).connect(this.master);
+    pan.connect(send).connect(this.fxSend);
+
+    const g = gain.gain;
+    g.setValueAtTime(0.0001, t);
+    if (kind === 'epiano') {
+      send.gain.value = 0.3;
+      const peak = 0.16 + vel * 0.3;
+      g.linearRampToValueAtTime(peak, t + 0.003);
+      g.setTargetAtTime(peak * 0.45, t + 0.003, 0.35);
+      g.setTargetAtTime(0.0001, t + 0.8, ring * 1.1);
+      const car = ctx.createOscillator();
+      car.frequency.value = freq;
+      const mod = ctx.createOscillator();
+      mod.frequency.value = freq; // 1:1 ratio, the tine "bark"
+      const idx = ctx.createGain();
+      idx.gain.setValueAtTime(freq * (0.6 + vel * 2.2), t);
+      idx.gain.setTargetAtTime(freq * 0.25, t, 0.18);
+      mod.connect(idx).connect(car.frequency);
+      // A quiet bell partial for the shimmer.
+      const bell = ctx.createOscillator();
+      bell.frequency.value = freq * 4.0;
+      const bg = ctx.createGain();
+      bg.gain.setValueAtTime(0.12 * vel, t);
+      bg.gain.setTargetAtTime(0.0001, t, 0.12);
+      bell.connect(bg).connect(gain);
+      car.connect(gain);
+      nodes.push(car, mod, bell);
+    } else {
+      const soft = kind === 'spiano';
+      send.gain.value = soft ? 0.42 : 0.3;
+      const peak = (soft ? 0.12 : 0.14) + vel * (soft ? 0.18 : 0.3);
+      g.linearRampToValueAtTime(peak, t + (soft ? 0.012 : 0.003));
+      // Fast initial drop then a long string decay.
+      g.setTargetAtTime(peak * 0.5, t + 0.01, soft ? 0.25 : 0.12);
+      g.setTargetAtTime(0.0001, t + 0.35, ring);
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.Q.value = 0.4;
+      const open = Math.min(16000, freq * (soft ? 3 + vel * 4 : 5 + vel * 14));
+      lp.frequency.setValueAtTime(open, t);
+      lp.frequency.setTargetAtTime(Math.max(freq * 1.6, 300), t + 0.02, ring * 0.45);
+      lp.connect(gain);
+      const wave = this.pianoWave(soft ? 1 : 0);
+      for (const cents of [-2.5, 2.5]) {
+        const o = ctx.createOscillator();
+        o.setPeriodicWave(wave);
+        o.frequency.value = freq;
+        o.detune.value = cents;
+        o.connect(lp);
+        nodes.push(o);
+      }
+      // Hammer: a short, filtered knock that is louder on hard presses.
+      const n = ctx.createBufferSource();
+      n.buffer = this.noise;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = Math.min(5000, freq * 3);
+      bp.Q.value = 1.2;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime((soft ? 0.05 : 0.12) * vel, t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+      n.connect(bp).connect(ng).connect(gain);
+      n.start(t, Math.random() * 0.5);
+      n.stop(t + 0.05);
+    }
+    for (const o of nodes) {
+      o.start(t);
+      o.stop(stopAt);
+    }
+    const note: PianoNote = { id: ++this.pianoId, nodes, gain, out: [gain, pan, send], released: false };
+    this.pianoNotes.push(note);
+    // Clean up after the note has died away even if it is never released.
+    setTimeout(() => this.dropPiano(note), (stopAt - ctx.currentTime + 0.2) * 1000);
+    return note.id;
+  }
+
+  /** Release a piano note (the damper falls). `when` 0 = now. */
+  pianoOff(id: number, when = 0, damp = 0.08): void {
+    const ctx = this.ctx;
+    if (!ctx || id < 0) return;
+    const note = this.pianoNotes.find((n) => n.id === id);
+    if (!note || note.released) return;
+    note.released = true;
+    const t = Math.max(when, ctx.currentTime);
+    const g = note.gain.gain as AudioParam & { cancelAndHoldAtTime?: (t: number) => void };
+    if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t);
+    else {
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);
+    }
+    g.setTargetAtTime(0.0001, t, damp);
+    const end = t + damp * 8;
+    for (const o of note.nodes) {
+      try {
+        o.stop(end);
+      } catch {
+        /* already stopped */
+      }
+    }
+    setTimeout(() => this.dropPiano(note), (end - ctx.currentTime + 0.2) * 1000);
+  }
+
+  private dropPiano(note: PianoNote): void {
+    const i = this.pianoNotes.indexOf(note);
+    if (i < 0) return;
+    this.pianoNotes.splice(i, 1);
+    for (const n of note.out) n.disconnect();
   }
 
   // ---- building blocks -------------------------------------------------

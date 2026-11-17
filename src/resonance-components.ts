@@ -40,3 +40,8 @@ export const LatticeCell = createComponent('LatticeCell', {
 export const GlideNote = createComponent('GlideNote', {
   id: { type: Types.Int8, default: 0 },
 });
+
+/** One piano key (0..23 from the lowest C). Clickable in desktop preview. */
+export const PianoKey = createComponent('PianoKey', {
+  id: { type: Types.Int8, default: 0 },
+});

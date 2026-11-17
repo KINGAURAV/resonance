@@ -23,7 +23,7 @@ import {
 } from '@iwsdk/core';
 
 /** Decorative meshes must never intercept pointer rays. */
-function decor<T extends Object3D>(obj: T): T {
+export function decor<T extends Object3D>(obj: T): T {
   obj.raycast = () => {};
   return obj;
 }

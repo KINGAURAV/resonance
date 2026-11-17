@@ -33,14 +33,14 @@ interface PebbleState {
 }
 
 // Stations from left to right, for the desktop arrow pebbles.
-const ARC: StudioMode[] = ['lattice', 'drums', 'playground', 'guitar', 'glide'];
+const ARC: StudioMode[] = ['lattice', 'drums', 'playground', 'piano', 'guitar', 'glide'];
 const DONE_KEY = 'resonance.introDone';
 const CONFIRM_MS = 3000;
 const HINTS = ['Touch to create sound', 'Grab. Stretch. Pluck.', 'Create your rhythm: drop a shape on an orbit', ''];
 
 // Left column = performance, right column = composition.
 // [action, label, side, grid cell, mode it belongs to]
-type PebbleMode = 'playground' | 'drums' | 'guitar' | 'lattice' | 'glide' | 'studio' | 'all'; // studio = any instrument
+type PebbleMode = 'playground' | 'drums' | 'guitar' | 'lattice' | 'glide' | 'piano' | 'studio' | 'all'; // studio = any instrument
 const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['play', 'Pause', -1, 0, 'playground'],
   ['beat', 'Beat', -1, 1, 'playground'],
@@ -56,6 +56,14 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['learn', 'Learn a beat', 1, 4, 'drums'],
   ['learnGuitar', 'Learn a song', 1, 4, 'guitar'],
   ['holdGuitar', 'Hold guitar', -1, 2, 'guitar'],
+  ['pianoDown', 'Octave -', -1, 0, 'piano'],
+  ['pianoUp', 'Octave +', -1, 1, 'piano'],
+  ['pianoSustain', 'Sustain: off', -1, 2, 'piano'],
+  ['pianoVolume', 'Volume: 100%', -1, 3, 'piano'],
+  ['pianoSound', 'Sound: Grand', 1, 0, 'piano'],
+  ['pianoLabels', 'Labels: on', 1, 1, 'piano'],
+  ['pianoScale', 'Scale: off', 1, 2, 'piano'],
+  ['pianoChord', 'Chord: off', 1, 3, 'piano'],
   ['prev', '< Instrument', -1, 6, 'all'],
   ['next', 'Instrument >', 1, 6, 'all'],
   ['loop', 'Record loop', -1, 4, 'all'],
@@ -76,9 +84,11 @@ export class UISystem extends createSystem({
   private look = new Vector3();
   private headPos = new Vector3();
   private tipPos = new Vector3();
-  private swipeFrom = [0, 0];
-  private swipeTime = [0, 0];
-  private swipeCooldown = 0;
+  private waveSide = [0, 0];
+  private waveY = [0, 0];
+  private waveRun = [0, 0];
+  private waveSpeed = [0, 0];
+  private waveCooldown = 0;
   private clearArmedAt = -1; // Reset needs a second tap within CONFIRM_MS
   private statusTop!: Label;
   private statusLoop!: Label;
@@ -191,7 +201,7 @@ export class UISystem extends createSystem({
       } catch {
         /* ignore */
       }
-      stage.toast(this.world.visibilityState.peek() !== VisibilityState.NonImmersive ? 'Swipe sideways at eye level for more instruments' : 'Use the Instrument arrows for more instruments');
+      stage.toast(this.world.visibilityState.peek() !== VisibilityState.NonImmersive ? 'Wave a hand at head height for more instruments' : 'Use the Instrument arrows for more instruments');
     }
   }
 
@@ -283,42 +293,53 @@ export class UISystem extends createSystem({
   }
 
   /**
-   * Swipe to change instrument: a quick sideways sweep of an open hand at
-   * eye level. Playing happens well below eye level, so strums, drum hits
-   * and Glide slides never count as swipes.
+   * Wave to change instrument: sweep an open hand sideways at about chin
+   * height or above (wave left = next instrument, wave right = previous).
+   * Every instrument is played lower down, so playing never counts as a
+   * wave; a pinch (Glide synth, grabbing) never counts either. After a
+   * switch the return stroke of the wave is ignored.
    */
-  private detectSwipe(dt: number): void {
+  private detectWave(dt: number): void {
     this.player.head.getWorldPosition(this.headPos);
     this.player.head.getWorldDirection(this.look); // +Z; the view looks the other way
-    // Head's right-hand direction on the floor plane.
-    const rx = this.look.z;
-    const rz = -this.look.x;
-    const len = Math.hypot(rx, rz) || 1;
+    // The head's right-hand direction on the floor plane.
+    const len = Math.hypot(this.look.x, this.look.z) || 1;
+    const rx = this.look.z / len;
+    const rz = -this.look.x / len;
     const sides = ['left', 'right'] as const;
     for (let h = 0; h < 2; h++) {
       this.player.indexTipSpaces[sides[h]].getWorldPosition(this.tipPos);
-      const side = ((this.tipPos.x - this.headPos.x) * rx + (this.tipPos.z - this.headPos.z) * rz) / len;
-      const high = this.tipPos.y > this.headPos.y - 0.14;
+      const side = (this.tipPos.x - this.headPos.x) * rx + (this.tipPos.z - this.headPos.z) * rz;
+      const y = this.tipPos.y;
+      const dSide = side - this.waveSide[h];
+      const dY = y - this.waveY[h];
+      this.waveSide[h] = side;
+      this.waveY[h] = y;
+      const high = y > this.headPos.y - 0.17;
       const pinching = this.input.xr.gamepads[sides[h]]?.getSelecting() ?? false;
-      if (!high || pinching || this.swipeCooldown > 0) {
-        this.swipeTime[h] = 0;
-        this.swipeFrom[h] = side;
+      if (!high || pinching || this.waveCooldown > 0 || dt <= 0) {
+        this.waveRun[h] = 0;
+        this.waveSpeed[h] = 0;
         continue;
       }
-      // Track how far the hand travels sideways in a 0.25 s window: a swipe
-      // is a quick flick (over 1 m/s), not a slow reach for a control.
-      this.swipeTime[h] += dt;
-      if (this.swipeTime[h] > 0.25) {
-        this.swipeTime[h] = 0;
-        this.swipeFrom[h] = side;
+      // Smoothed sideways speed (hand poses arrive in steps, so raw speed
+      // flickers between zero and double).
+      const vs = dSide / dt;
+      this.waveSpeed[h] += (vs - this.waveSpeed[h]) * 0.5;
+      const v = this.waveSpeed[h];
+      const mostlySideways = Math.abs(dSide) >= Math.abs(dY) * 0.8;
+      if (Math.abs(v) < 0.25 || !mostlySideways) {
+        this.waveRun[h] *= 0.8; // a pause or a vertical move fades the stroke
+        if (Math.abs(this.waveRun[h]) < 0.01) this.waveRun[h] = 0;
+        continue;
       }
-      const moved = side - this.swipeFrom[h];
-      if (Math.abs(moved) > 0.25) {
-        // Like turning a page: sweep left to bring in the next instrument.
-        this.step(moved < 0 ? 1 : -1);
-        this.swipeCooldown = 0.7;
-        this.swipeTime[h] = 0;
-        this.swipeFrom[h] = side;
+      // Add up travel while the hand keeps going the same way.
+      if (Math.sign(dSide) !== Math.sign(this.waveRun[h]) && this.waveRun[h] !== 0) this.waveRun[h] = 0;
+      this.waveRun[h] += dSide;
+      if (Math.abs(this.waveRun[h]) > 0.13) {
+        this.step(this.waveRun[h] < 0 ? 1 : -1);
+        this.waveCooldown = 0.9;
+        this.waveRun[0] = this.waveRun[1] = 0;
       }
     }
   }
@@ -330,8 +351,8 @@ export class UISystem extends createSystem({
       this.wasImmersive = immersive;
       this.applyVisibility();
     }
-    this.swipeCooldown = Math.max(0, this.swipeCooldown - dt);
-    if (immersive && stage.tutorialStep >= 3) this.detectSwipe(dt);
+    this.waveCooldown = Math.max(0, this.waveCooldown - dt);
+    if (immersive && stage.tutorialStep >= 3) this.detectWave(delta);
     if (this.advanceIn >= 0) {
       this.advanceIn -= dt;
       if (this.advanceIn < 0) this.setStep(stage.tutorialStep + 1);

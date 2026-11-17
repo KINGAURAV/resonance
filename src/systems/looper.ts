@@ -9,7 +9,7 @@
  * loop downbeat after a count-in. "Undo layer" removes the newest layer.
  */
 import { createSystem, Sprite } from '@iwsdk/core';
-import { audio, type VoiceKind } from '../audio/engine.js';
+import { audio, isPiano, type VoiceKind } from '../audio/engine.js';
 import { COLORS, stage, trace } from '../stage.js';
 import { glowSprite, Label } from '../visuals/textures.js';
 
@@ -19,7 +19,7 @@ const BEATS = 8; // two bars of 4/4
 const COUNT_IN = 4; // beats
 const LOOKAHEAD = 0.12;
 const RED = 0xff3350;
-const F = 8; // floats per event: offset, freq, vel, bright, x, y, z, validFrom
+const F = 9; // floats per event: offset, freq, vel, bright, x, y, z, validFrom, duration
 
 type State = 'idle' | 'countin' | 'recording' | 'playing' | 'overdubWait' | 'overdub';
 
@@ -173,8 +173,11 @@ export class LooperSystem extends createSystem({}) {
     }
   }
 
-  private capture(kind: VoiceKind, freq: number, opts: { velocity?: number; brightness?: number; x?: number; y?: number; z?: number }, time: number): void {
-    const recording = this.state === 'recording' || this.state === 'overdub';
+  private capture(kind: VoiceKind, freq: number, opts: { velocity?: number; brightness?: number; x?: number; y?: number; z?: number; duration?: number }, time: number): void {
+    // Piano notes arrive when the key is let go, so a note that began in the
+    // pass that just ended still belongs to it.
+    const lateHeld = this.state === 'playing' && isPiano(kind) && time < this.stateEnds && time >= this.stateEnds - this.length;
+    const recording = this.state === 'recording' || this.state === 'overdub' || lateHeld;
     // A note played just before the first beat (people rush the downbeat)
     // still belongs to the loop.
     const early = (this.state === 'countin' || this.state === 'overdubWait') && time > this.stateStarts - this.beat * 0.25;
@@ -201,6 +204,7 @@ export class LooperSystem extends createSystem({}) {
     this.data[j + 5] = opts.y ?? 1;
     this.data[j + 6] = opts.z ?? -0.5;
     this.data[j + 7] = validFrom;
+    this.data[j + 8] = Math.min(opts.duration ?? 0, this.length);
   }
 
   private runCountIn(now: number): void {
@@ -267,6 +271,7 @@ export class LooperSystem extends createSystem({}) {
           velocity: this.data[j + 2] * 0.85, // sit slightly under live playing
           brightness: this.data[j + 3],
           x: this.data[j + 4], y: this.data[j + 5], z: this.data[j + 6],
+          duration: this.data[j + 8],
         });
       }
       this.scheduledUntil = to;

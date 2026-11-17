@@ -42,9 +42,17 @@ Competition 2026 — Entertainment track, New Experience division.
   voices; **Chords** makes each pinch a three-note chord.
 - Drum pads can be pinched and moved to build your own kit layout.
 - One instrument at a time sits in front of you. To change instrument in VR,
-  **swipe**: a quick sideways flick of an open hand at eye level (flick left
-  for the next one, right for the previous). The `< Instrument` /
+  **wave**: sweep an open hand sideways at about head height (wave left for
+  the next instrument, right for the previous). Instruments are played lower
+  down, so playing never counts as a wave. The `< Instrument` /
   `Instrument >` pebbles do the same, in VR and in the desktop preview.
+- **Piano**: 24 keys (two octaves, C3-B4 to start) played with all ten
+  fingertips; quicker presses are louder, notes ring while held. Pebbles:
+  Octave -/+, Sustain, Volume, Sound (Grand / Electric / Soft), note Labels,
+  Scale (C, G, D major; A, E, C minor: in-scale keys glow cyan, the root
+  brighter) and Chord guide (C, G, Am, F, Dm, Em: the chord's keys glow gold
+  and it celebrates when you hold all three). Piano notes are recorded into
+  the loop with how long you held them.
 - **Hold guitar** (VR): the guitar comes into your hands. The body rests in
   front of your stomach and the neck follows your left hand; slide the left
   hand along the neck to change chord and strum over the body with your right.
@@ -80,6 +88,7 @@ On this machine Node 22 is installed side by side:
 | `src/systems/guitar.ts` | Air guitar: chord blocks, strum detection, learn-a-song lessons |
 | `src/systems/lattice.ts` | Note-cube lattice and arpeggiator |
 | `src/systems/glide.ts` | Pinch-to-play sustained synth |
+| `src/systems/piano.ts` | Two-octave piano: ten-finger key detection, sustain, sounds, scale and chord guides |
 | `src/systems/looper.ts` | Cross-instrument loop recorder and overdub |
 | `src/visuals/instruments.ts` | Procedural guitar and drum models |
 | `src/systems/ui.ts` | Control pebbles, guided intro, title overlay |

@@ -6,7 +6,7 @@ import { Group, Vector3, type Entity, type Object3D } from '@iwsdk/core';
 import type { VoiceKind } from './audio/engine.js';
 import type { Label } from './visuals/textures.js';
 
-export type StudioMode = 'playground' | 'drums' | 'guitar' | 'lattice' | 'glide';
+export type StudioMode = 'playground' | 'drums' | 'guitar' | 'lattice' | 'glide' | 'piano';
 
 export const COLORS = {
   cyan: 0x35e0ff,
@@ -129,16 +129,17 @@ export function trace(...args: unknown[]): void {
   if (import.meta.env.DEV) console.log('[resonance]', ...args);
 }
 
-export const MODES: StudioMode[] = ['playground', 'drums', 'guitar', 'lattice', 'glide'];
+export const MODES: StudioMode[] = ['playground', 'drums', 'guitar', 'lattice', 'glide', 'piano'];
 
 /** Where each instrument sits around the seat (radians; positive = left). */
 export const STATION_ANGLE: Record<StudioMode, number> = {
   playground: 0,
   // Spaced by each instrument's width so neighbours never overlap.
   drums: 1.35,
-  guitar: -1.45,
+  piano: -1.2,
+  guitar: -2.0,
   lattice: 2.5,
-  glide: -2.65,
+  glide: -2.7,
 };
 
 export const STATION_NAME: Record<StudioMode, string> = {
@@ -147,6 +148,7 @@ export const STATION_NAME: Record<StudioMode, string> = {
   guitar: 'Guitar',
   lattice: 'Lattice',
   glide: 'Glide synth',
+  piano: 'Piano',
 };
 
 /** Swing a pivot around the player's seat (which is LAYOUT.forward behind the root). */
