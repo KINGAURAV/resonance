@@ -36,9 +36,9 @@ const COLS = 5;
 const ROWS = 3;
 const LAYERS = 2;
 const CELLS = COLS * ROWS * LAYERS;
-const PITCH = 0.058; // spacing between cube centres (m)
-const SIZE = 0.034;
-const REACH = 0.024; // fingertip distance from a centre that counts as inside
+const PITCH = 0.08; // spacing between cube centres (m)
+const SIZE = 0.038;
+const REACH = 0.03; // fingertip distance from a centre that counts as inside
 const NOTE_COLORS = [COLORS.cyan, COLORS.mint, COLORS.gold, COLORS.magenta, COLORS.violet];
 const LOOKAHEAD = 0.1;
 

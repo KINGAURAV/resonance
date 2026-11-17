@@ -135,10 +135,10 @@ export const MODES: StudioMode[] = ['playground', 'drums', 'guitar', 'lattice', 
 export const STATION_ANGLE: Record<StudioMode, number> = {
   playground: 0,
   // Spaced by each instrument's width so neighbours never overlap.
-  drums: 1.15,
-  guitar: -1.25,
-  lattice: 2.05,
-  glide: -2.4,
+  drums: 1.35,
+  guitar: -1.45,
+  lattice: 2.5,
+  glide: -2.65,
 };
 
 export const STATION_NAME: Record<StudioMode, string> = {
