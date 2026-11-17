@@ -7,6 +7,11 @@
  * selected. Sweep a fingertip across the strings over the body to strum; each
  * string sounds as the finger crosses it, so slow sweeps arpeggiate.
  *
+ * "Hold guitar" puts it in your hands: the body rests in front of your
+ * stomach and the neck follows your left hand, wherever you hold it. Slide
+ * the left hand along the neck (nearer or further from the body) to change
+ * chord, and strum over the body with the right hand.
+ *
  * Strum direction matters: a downstroke (low string first) is full and warm,
  * an upstroke is lighter and brighter, like a real guitar.
  *
@@ -22,10 +27,12 @@ import {
   CylinderGeometry,
   DoubleSide,
   Group,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   Pressed,
+  Quaternion,
   RayInteractable,
   Sprite,
   SpriteMaterial,
@@ -103,12 +110,28 @@ export class GuitarSystem extends createSystem({
   private feel!: Label;
   private feelAlpha = 0;
   private judgedAt = -1; // one verdict per strum, not per string
+  // Holding the guitar.
+  private holding = false;
+  private restQuat = new Quaternion();
+  private head = new Vector3();
+  private fwd = new Vector3();
+  private smoothFwd = new Vector3(0, 0, -1);
+  private anchor = new Vector3();
+  private leftTip = new Vector3();
+  private axisX = new Vector3(1, 0, 0);
+  private axisY = new Vector3();
+  private axisZ = new Vector3();
+  private basis = new Matrix4();
+  private targetPos = new Vector3();
+  private targetQuat = new Quaternion();
+  private parentQuat = new Quaternion();
 
   init(): void {
     const g = this.guitar;
     g.name = 'Guitar';
     g.position.set(0.02, -0.01, 0.15);
     g.rotation.x = -0.55; // face tilts up toward the seated player
+    this.restQuat.copy(g.quaternion);
     const guitarEntity = this.world.createTransformEntity(g, { parent: stage.stationEntities.guitar });
 
     // The instrument itself is decoration; raise it so the strings sit just
@@ -194,7 +217,68 @@ export class GuitarSystem extends createSystem({
         for (let i = 0; i < STRINGS; i++) this.pluck(i, 0.7, audio.now + i * 0.028);
       }),
     );
+    stage.actions.holdGuitar = () => {
+      if (this.world.visibilityState.peek() === VisibilityState.NonImmersive) {
+        stage.toast('Holding the guitar needs VR hand tracking');
+        return;
+      }
+      this.setHolding(!this.holding);
+    };
     stage.actions.learnGuitar = () => (this.learning ? this.stopLearning('Free play') : this.startLearning());
+  }
+
+  private setHolding(on: boolean): void {
+    this.holding = on;
+    stage.setPebbleLabel('holdGuitar', on ? 'Put it down' : 'Hold guitar');
+    if (on) {
+      this.player.head.getWorldDirection(this.fwd);
+      this.smoothFwd.set(-this.fwd.x, 0, -this.fwd.z).normalize();
+      stage.toast('Left hand on the neck, strum with your right');
+    } else {
+      this.guitar.position.set(0.02, -0.01, 0.15);
+      this.guitar.quaternion.copy(this.restQuat);
+    }
+    trace('hold guitar', on);
+  }
+
+  /** Body in front of your stomach, neck pointing at your left hand. */
+  private followHands(dt: number): void {
+    this.player.head.getWorldPosition(this.head);
+    this.player.head.getWorldDirection(this.fwd);
+    this.fwd.set(-this.fwd.x, 0, -this.fwd.z);
+    if (this.fwd.lengthSq() > 1e-4) {
+      // Follow the head's heading slowly, so glancing around stays steady.
+      this.smoothFwd.lerp(this.fwd.normalize(), 1 - Math.exp(-dt * 2)).normalize();
+    }
+    const f = this.smoothFwd;
+    // Right of the heading: (-f.z, 0, f.x).
+    this.anchor.set(
+      this.head.x + f.x * 0.24 - f.z * 0.07,
+      this.head.y - 0.4,
+      this.head.z + f.z * 0.24 + f.x * 0.07,
+    );
+    this.player.indexTipSpaces.left.getWorldPosition(this.leftTip);
+    // +x of the guitar runs from the neck (your left hand) to the body.
+    this.axisY.copy(this.anchor).sub(this.leftTip);
+    if (this.axisY.length() > 0.1) this.axisX.copy(this.axisY).normalize();
+    // The face (+z) tilts up and back toward you, as in the resting pose,
+    // so you can see the strings and chord blocks.
+    this.axisZ.set(-f.x * 0.55, 0.83, -f.z * 0.55);
+    this.axisZ.addScaledVector(this.axisX, -this.axisZ.dot(this.axisX)).normalize();
+    this.axisY.crossVectors(this.axisZ, this.axisX);
+    this.basis.makeBasis(this.axisX, this.axisY, this.axisZ);
+    this.targetQuat.setFromRotationMatrix(this.basis);
+    this.targetPos.copy(this.anchor).addScaledVector(this.axisX, -STRUM_CENTER_X);
+
+    // Convert to the guitar's parent space, then ease toward it.
+    const parent = this.guitar.parent!;
+    parent.updateWorldMatrix(true, false);
+    parent.worldToLocal(this.targetPos);
+    parent.getWorldQuaternion(this.parentQuat).invert();
+    this.targetQuat.premultiply(this.parentQuat);
+    const k = 1 - Math.exp(-dt * 20);
+    this.guitar.position.lerp(this.targetPos, k);
+    this.guitar.quaternion.slerp(this.targetQuat, k);
   }
 
   private setChord(id: number): void {
@@ -368,7 +452,13 @@ export class GuitarSystem extends createSystem({
 
       // Neck: touching a block selects (and keeps) that chord.
       if (Math.abs(z) < 0.04 && x > NECK_START && x < NECK_START + BLOCK * CHORDS.length && Math.abs(y) < 0.06) {
-        this.setChord(Math.min(CHORDS.length - 1, Math.floor((x - NECK_START) / BLOCK)));
+        const pos = (x - NECK_START) / BLOCK;
+        // While holding, the hand is always on the neck: only switch chord
+        // once it is clearly inside the next block, so it never flickers.
+        const frac = pos - Math.floor(pos);
+        if (!this.holding || h !== 0 || (frac > 0.15 && frac < 0.85)) {
+          this.setChord(Math.min(CHORDS.length - 1, Math.floor(pos)));
+        }
       }
 
       // Body: a string sounds when the fingertip crosses its line.
@@ -396,9 +486,14 @@ export class GuitarSystem extends createSystem({
     }
     if (!active) {
       if (this.learning) this.stopLearning('Free play');
+      if (this.holding) this.setHolding(false);
       return;
     }
     const dt = Math.min(delta, 0.05);
+    if (this.holding) {
+      if (this.world.visibilityState.peek() === VisibilityState.NonImmersive) this.setHolding(false);
+      else this.followHands(dt);
+    }
     if (this.world.visibilityState.peek() !== VisibilityState.NonImmersive) this.detectHands(delta);
     const wanted = this.learning ? this.updateLesson(dt) : -1;
     this.feelAlpha = Math.max(0, this.feelAlpha - dt * 1.2);

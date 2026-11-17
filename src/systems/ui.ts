@@ -19,7 +19,7 @@ import {
 import { audio } from '../audio/engine.js';
 import { loadComposition, saveComposition } from '../composition.js';
 import { Pebble } from '../resonance-components.js';
-import { COLORS, MODES, setShown, stage, STATION_ANGLE, STATION_NAME, trace, type StudioMode } from '../stage.js';
+import { COLORS, setShown, stage, STATION_NAME, trace, type StudioMode } from '../stage.js';
 import { glowSprite, Label } from '../visuals/textures.js';
 import { resetResonator } from './resonators.js';
 
@@ -55,6 +55,7 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['arpClear', 'Clear notes', 1, 2, 'lattice'],
   ['learn', 'Learn a beat', 1, 4, 'drums'],
   ['learnGuitar', 'Learn a song', 1, 4, 'guitar'],
+  ['holdGuitar', 'Hold guitar', -1, 2, 'guitar'],
   ['prev', '< Instrument', -1, 6, 'all'],
   ['next', 'Instrument >', 1, 6, 'all'],
   ['loop', 'Record loop', -1, 4, 'all'],
@@ -73,6 +74,11 @@ export class UISystem extends createSystem({
   private lastPress = 0;
   private wasImmersive = false;
   private look = new Vector3();
+  private headPos = new Vector3();
+  private tipPos = new Vector3();
+  private swipeFrom = [0, 0];
+  private swipeTime = [0, 0];
+  private swipeCooldown = 0;
   private clearArmedAt = -1; // Reset needs a second tap within CONFIRM_MS
   private statusTop!: Label;
   private statusLoop!: Label;
@@ -185,7 +191,7 @@ export class UISystem extends createSystem({
       } catch {
         /* ignore */
       }
-      stage.toast('Turn your head to find more instruments');
+      stage.toast(this.world.visibilityState.peek() !== VisibilityState.NonImmersive ? 'Swipe sideways at eye level for more instruments' : 'Use the Instrument arrows for more instruments');
     }
   }
 
@@ -201,9 +207,9 @@ export class UISystem extends createSystem({
     });
     for (const p of this.pebbles) {
       const inMode = p.mode === stage.mode || p.mode === 'all' || (p.mode === 'studio' && !play);
-      // Arrow pebbles replace head-turning in the flat desktop preview.
+      // Arrow pebbles: the button way to change instrument (swiping in VR).
       const arrow = p.action === 'prev' || p.action === 'next';
-      setShown(p.object, arrow ? !immersive && step >= 3 : inMode && (!play || step >= 3 || p.action === 'intro'));
+      setShown(p.object, arrow ? step >= 3 : inMode && (!play || step >= 3 || p.action === 'intro'));
       if (p.action === 'intro') p.label.set(step >= 3 ? 'Replay intro' : 'Skip intro');
     }
   }
@@ -251,12 +257,9 @@ export class UISystem extends createSystem({
         stage.toast('Reset');
         break;
       case 'prev':
-      case 'next': {
-        const i = ARC.indexOf(stage.mode) + (action === 'next' ? 1 : -1);
-        stage.setMode(ARC[(i + ARC.length) % ARC.length]);
-        stage.toast(STATION_NAME[stage.mode]);
+      case 'next':
+        this.step(action === 'next' ? 1 : -1);
         break;
-      }
       default:
         stage.actions[action]?.();
         break;
@@ -271,41 +274,64 @@ export class UISystem extends createSystem({
     }
   }
 
-  /** In VR the instrument you turn to face becomes the active one. */
-  private followHead(): void {
-    this.player.head.getWorldDirection(this.look);
-    // getWorldDirection is the head's +Z; the view looks the other way.
-    // Undo the playground's own yaw to get the angle around the seat.
-    const ry = stage.root.rotation.y;
-    const x = -this.look.x * Math.cos(ry) + this.look.z * Math.sin(ry);
-    const z = -this.look.x * Math.sin(ry) - this.look.z * Math.cos(ry);
-    const yaw = Math.atan2(-x, -z);
-    let best = stage.mode;
-    let bestDiff = 10;
-    for (const mode of MODES) {
-      const d = Math.abs(Math.atan2(Math.sin(yaw - STATION_ANGLE[mode]), Math.cos(yaw - STATION_ANGLE[mode])));
-      if (d < bestDiff) {
-        bestDiff = d;
-        best = mode;
+  /** Switch to the neighbouring instrument (dir +1 = next to the right). */
+  private step(dir: number): void {
+    const i = ARC.indexOf(stage.mode) + dir;
+    stage.setMode(ARC[(i + ARC.length) % ARC.length]);
+    stage.toast(STATION_NAME[stage.mode]);
+    trace('switch', stage.mode);
+  }
+
+  /**
+   * Swipe to change instrument: a quick sideways sweep of an open hand at
+   * eye level. Playing happens well below eye level, so strums, drum hits
+   * and Glide slides never count as swipes.
+   */
+  private detectSwipe(dt: number): void {
+    this.player.head.getWorldPosition(this.headPos);
+    this.player.head.getWorldDirection(this.look); // +Z; the view looks the other way
+    // Head's right-hand direction on the floor plane.
+    const rx = this.look.z;
+    const rz = -this.look.x;
+    const len = Math.hypot(rx, rz) || 1;
+    const sides = ['left', 'right'] as const;
+    for (let h = 0; h < 2; h++) {
+      this.player.indexTipSpaces[sides[h]].getWorldPosition(this.tipPos);
+      const side = ((this.tipPos.x - this.headPos.x) * rx + (this.tipPos.z - this.headPos.z) * rz) / len;
+      const high = this.tipPos.y > this.headPos.y - 0.14;
+      const pinching = this.input.xr.gamepads[sides[h]]?.getSelecting() ?? false;
+      if (!high || pinching || this.swipeCooldown > 0) {
+        this.swipeTime[h] = 0;
+        this.swipeFrom[h] = side;
+        continue;
       }
-    }
-    // Switch only once clearly facing the next one, so it never flickers.
-    if (best !== stage.mode && bestDiff < 0.38) {
-      stage.setMode(best);
-      trace('facing', best);
+      // Track how far the hand travels sideways in a 0.25 s window: a swipe
+      // is a quick flick (over 1 m/s), not a slow reach for a control.
+      this.swipeTime[h] += dt;
+      if (this.swipeTime[h] > 0.25) {
+        this.swipeTime[h] = 0;
+        this.swipeFrom[h] = side;
+      }
+      const moved = side - this.swipeFrom[h];
+      if (Math.abs(moved) > 0.25) {
+        // Like turning a page: sweep left to bring in the next instrument.
+        this.step(moved < 0 ? 1 : -1);
+        this.swipeCooldown = 0.7;
+        this.swipeTime[h] = 0;
+        this.swipeFrom[h] = side;
+      }
     }
   }
 
   update(delta: number, time: number): void {
     const dt = Math.min(delta, 0.05);
     const immersive = this.world.visibilityState.peek() !== VisibilityState.NonImmersive;
-    const showAll = immersive && stage.tutorialStep >= 3;
-    if (showAll !== stage.showAll || immersive !== this.wasImmersive) {
-      stage.showAll = showAll;
+    if (immersive !== this.wasImmersive) {
       this.wasImmersive = immersive;
       this.applyVisibility();
     }
-    if (showAll) this.followHead();
+    this.swipeCooldown = Math.max(0, this.swipeCooldown - dt);
+    if (immersive && stage.tutorialStep >= 3) this.detectSwipe(dt);
     if (this.advanceIn >= 0) {
       this.advanceIn -= dt;
       if (this.advanceIn < 0) this.setStep(stage.tutorialStep + 1);

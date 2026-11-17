@@ -41,10 +41,13 @@ Competition 2026 — Entertainment track, New Experience division.
   raise or lower the hand to brighten or mellow the tone. Two hands = two
   voices; **Chords** makes each pinch a three-note chord.
 - Drum pads can be pinched and moved to build your own kit layout.
-- In VR the instruments sit in an arc around your seat: **turn your head** and
-  the one you face becomes active (playground ahead, drums and Lattice to the
-  left, guitar and Glide synth to the right). In desktop preview, the
-  `< Instrument` / `Instrument >` pebbles do the same.
+- One instrument at a time sits in front of you. To change instrument in VR,
+  **swipe**: a quick sideways flick of an open hand at eye level (flick left
+  for the next one, right for the previous). The `< Instrument` /
+  `Instrument >` pebbles do the same, in VR and in the desktop preview.
+- **Hold guitar** (VR): the guitar comes into your hands. The body rests in
+  front of your stomach and the neck follows your left hand; slide the left
+  hand along the neck to change chord and strum over the body with your right.
 
 All sound is synthesized in the browser (Web Audio); nothing is downloaded and
 no network service is used.

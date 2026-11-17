@@ -479,9 +479,9 @@ export class PlaygroundSystem extends createSystem({}) {
     }
     wp.needsUpdate = true;
 
-    // Stations: fixed around the seat in VR; in desktop preview the arc
-    // spins so the active one faces the camera. Pebbles follow the active one.
-    const target = immersive ? 0 : STATION_ANGLE[stage.mode];
+    // Stations sit on an arc that spins so the active one is in front of
+    // you (swipe or arrow pebbles to change). Pebbles follow the active one.
+    const target = STATION_ANGLE[stage.mode];
     stage.carousel += (target - stage.carousel) * (1 - Math.exp(-dt * 6));
     for (let i = 0; i < MODES.length; i++) {
       const mode = MODES[i];
