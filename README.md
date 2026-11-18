@@ -15,7 +15,7 @@ Competition 2026 — Entertainment track, New Experience division.
 - **Grab, stretch and pluck** the glowing string. Stretching raises the pitch;
   plucking near an end sounds brighter.
 - **Drop a resonator on an orbit** around the core to add it to an 8-step loop.
-- Poke the floating pebbles: Pause/Play, Beat, Slower/Faster, Save, Load,
+- Press the icon buttons: Pause/Play, Beat, Slower/Faster, Save, Load,
   Reset (tap twice to confirm), Replay intro. A status line above the controls
   shows tempo, key, time signature and the loop state.
 
@@ -33,11 +33,11 @@ Competition 2026 — Entertainment track, New Experience division.
   from the next downbeat after a count-in; **Undo layer** removes the newest
   layer; **Snap** (on by default) moves notes to the nearest sixteenth. The
   loop keeps playing while you turn to other instruments.
-- Poke **Lattice** for a block of 30 note cubes (five notes x three octaves x
+- **Lattice**: a block of 30 note cubes (five notes x three octaves x
   two timbres). Touch cubes to play (the cube under your finger shows its note
   name); with **Arp** on, cubes latch and the
   arpeggiator cycles through them in tempo.
-- Poke **Glide synth**: pinch to hold a note, slide sideways to change pitch,
+- **Glide synth**: pinch to hold a note, slide sideways to change pitch,
   raise or lower the hand to brighten or mellow the tone. Two hands = two
   voices; **Chords** makes each pinch a three-note chord.
 - Drum pads can be pinched and moved to build your own kit layout.
@@ -51,7 +51,7 @@ Competition 2026 — Entertainment track, New Experience division.
   when pressed, and glows mint while its feature is on. Less-used controls
   (save/load, reset, clear loop, snap, piano settings) appear after **More**.
 - **Piano**: 24 keys (two octaves, C3-B4 to start) played with all ten
-  fingertips; quicker presses are louder, notes ring while held. Pebbles:
+  fingertips; quicker presses are louder, notes ring while held. Buttons:
   Octave -/+, Sustain, Volume, Sound (Grand / Electric / Soft), note Labels,
   Scale (C, G, D major; A, E, C minor: in-scale keys glow cyan, the root
   brighter) and Chord guide (C, G, Am, F, Dm, Em: the chord's keys glow gold
@@ -111,11 +111,19 @@ On this machine Node 22 is installed side by side:
 | `src/systems/piano.ts` | Two-octave piano: ten-finger key detection, sustain, sounds, scale and chord guides |
 | `src/systems/looper.ts` | Cross-instrument loop recorder and overdub |
 | `src/visuals/instruments.ts` | Procedural guitar and drum models |
-| `src/systems/ui.ts` | Control pebbles, guided intro, title overlay |
+| `src/systems/ui.ts` | Icon buttons, instrument arrows, guided intro, title overlay |
 | `src/composition.ts` | Versioned JSON save/load (localStorage) |
 
 ## Testing status
 
 Verified in the IWSDK browser emulator with simulated hands: touch, grab,
 dock, sequencer timing, string stretch and pluck, all controls, save/load.
-**Not yet tested on a physical Quest headset.**
+Played on a Meta Quest 3 by the developer during development.
+
+## Credits and licences
+
+- All sound is synthesized at runtime; there are no audio, image or model files.
+- Lesson songs are traditional, public-domain melodies: Twinkle Twinkle Little
+  Star, Ode to Joy (Beethoven), Jingle Bells (Pierpont, 1857), Mary Had a
+  Little Lamb, Amazing Grace, Hot Cross Buns.
+- Built on Meta's Immersive Web SDK (`@iwsdk/core`) and Three.js.
