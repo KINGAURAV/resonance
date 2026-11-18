@@ -59,6 +59,7 @@ const ON_COLOR = COLORS.mint;
 // Stations from left to right, for the desktop arrow pebbles.
 const ARC: StudioMode[] = ['lattice', 'drums', 'playground', 'piano', 'guitar', 'glide'];
 const CONFIRM_MS = 3000;
+const VOLUME_KEY = 'resonance.volume';
 const PRESS_R = 0.03; // fingertip this close to a pebble centre presses it
 const PRESS_RE = 0.055; // and must move this far away to press it again
 /** Rays still work on pebbles; the fingertip touch pointer must not. */
@@ -106,6 +107,8 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['glideSong', 'Song: Mary Had a Little Lamb', 1, 1, 'glide'],
   ['prev', '', -1, 99, 'all'], // arrows: placed separately
   ['next', '', 1, 99, 'all'],
+  ['volDown', 'Quieter', -1, 98, 'all'], // under the arrows: placed separately
+  ['volUp', 'Louder', 1, 98, 'all'],
   ['more', 'More', -1, 6, 'all'],
   ['loop', 'Record loop', -1, 4, 'all'],
   ['loopClear', 'Clear loop', -1, 5, 'all'],
@@ -183,6 +186,10 @@ export class UISystem extends createSystem({
       if (arrow) {
         // Big arrows at the far left and right: always in the same place.
         object.position.set(side * 0.49, 0.13, 0.07);
+      } else if (cell === 98) {
+        // Volume sits under the arrows, so it is in the same place on every
+        // instrument and visible from the very first moment.
+        object.position.set(side * 0.49, -0.005, 0.07);
       } else {
         // 2-column grid per side, all at the same depth, so reaching for one
         // button never sweeps a finger through another.
@@ -221,6 +228,12 @@ export class UISystem extends createSystem({
       this.applyVisibility();
     };
 
+    try {
+      const saved = parseFloat(localStorage.getItem(VOLUME_KEY) ?? '');
+      if (saved >= 0 && saved <= 1.5) audio.setVolume(saved);
+    } catch {
+      /* storage unavailable: default volume */
+    }
     // Every visit opens on the guided tutorial (Skip intro is always there),
     // so a first-time player is never dropped into the full studio.
     this.setStep(0);
@@ -247,6 +260,16 @@ export class UISystem extends createSystem({
         if (s !== VisibilityState.NonImmersive) overlay.style.display = 'none';
       }),
     );
+  }
+
+  /** Change the master volume, remember it on this device, and say so. */
+  private setVolume(v: number): void {
+    audio.setVolume(v);
+    try {
+      localStorage.setItem(VOLUME_KEY, String(audio.volume));
+    } catch {
+      /* ignore */
+    }
   }
 
   private progress(fromStep: number, delay: number): void {
@@ -277,7 +300,8 @@ export class UISystem extends createSystem({
       const inMode = p.mode === stage.mode || p.mode === 'all' || (p.mode === 'studio' && !play);
       const arrow = p.action === 'prev' || p.action === 'next';
       const basic = !ADVANCED.has(p.action) || this.showMore;
-      setShown(p.object, arrow || p.action === 'more' ? step >= 3 : basic && inMode && (!play || step >= 3 || p.action === 'intro'));
+      const vol = p.action === 'volDown' || p.action === 'volUp';
+      setShown(p.object, vol ? true : arrow || p.action === 'more' ? step >= 3 : basic && inMode && (!play || step >= 3 || p.action === 'intro'));
       if (p.action === 'intro') p.label.set(step >= 3 ? 'Replay intro' : 'Skip intro');
       if (arrow) {
         // Name the instrument the arrow leads to.
@@ -296,6 +320,14 @@ export class UISystem extends createSystem({
     }
     trace('ui', action, 'slots', Array.from(stage.slots).join(','));
     switch (action) {
+      case 'volDown':
+      case 'volUp': {
+        audio.start();
+        const steps = Math.round(audio.volume * 4) + (action === 'volUp' ? 1 : -1);
+        this.setVolume(Math.max(0, Math.min(6, steps)) / 4);
+        stage.toast(audio.volume === 0 ? 'Sound off' : `Volume ${Math.round(audio.volume * 100)}%`);
+        break;
+      }
       case 'more':
         this.showMore = !this.showMore;
         p?.label.set(this.showMore ? 'Less' : 'More');
@@ -441,7 +473,7 @@ export class UISystem extends createSystem({
       this.statusTop.opacity = show ? 0.95 : 0;
       this.statusLoop.opacity = show ? 0.9 : 0;
       if (show) {
-        this.statusTop.set(`${stage.bpm} BPM  \u00b7  Key C  \u00b7  4/4`);
+        this.statusTop.set(`${stage.bpm} BPM  \u00b7  Key C  \u00b7  4/4  \u00b7  Vol ${Math.round(audio.volume * 100)}%`);
         this.statusLoop.set(stage.loopStatus);
       }
     }

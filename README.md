@@ -77,6 +77,8 @@ Competition 2026 — Entertainment track, New Experience division.
       Brother John, London Bridge, Amazing Grace, Fur Elise (opening).
     - Lattice and Glide synth: Mary Had a Little Lamb, Amazing Grace, Hot Cross
       Buns, Old MacDonald, Camptown Races, Auld Lang Syne.
+- **Volume**: Quieter / Louder buttons under the arrows on every instrument
+  (0-150% in 25% steps, shown in the status line, remembered on the device).
 - Every visit opens on the guided tutorial (Skip intro is always available).
 - **Hold guitar** (VR): the guitar comes into your hands. The body rests in
   front of your stomach and the neck follows your left hand; slide the left

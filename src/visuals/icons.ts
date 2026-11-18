@@ -137,6 +137,15 @@ const DRAW: Record<string, Draw> = {
     g.arc(72, 64, 22, -0.8, 0.8);
     g.stroke();
   },
+  volDown: (g) => {
+    poly(g, [18, 52, 36, 52, 60, 32, 60, 96, 36, 76, 18, 76]);
+    g.fillRect(72, 58, 40, 12);
+  },
+  volUp: (g) => {
+    poly(g, [18, 52, 36, 52, 60, 32, 60, 96, 36, 76, 18, 76]);
+    g.fillRect(72, 58, 40, 12);
+    g.fillRect(86, 44, 12, 40);
+  },
   wave: (g) => {
     g.beginPath();
     for (let x = 22; x <= 106; x += 2) {
@@ -214,6 +223,8 @@ export const BUTTONS: Record<string, { icon: string; color: number }> = {
   loopUndo: { icon: 'undo', color: COLORS.violet },
   snap: { icon: 'snap', color: COLORS.violet },
   more: { icon: 'more', color: COLORS.cyan },
+  volDown: { icon: 'volDown', color: COLORS.cyan },
+  volUp: { icon: 'volUp', color: COLORS.cyan },
 };
 
 const cache = new Map<string, CanvasTexture>();

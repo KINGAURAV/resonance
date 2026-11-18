@@ -72,6 +72,8 @@ export class AudioEngine {
   wave = new Uint8Array(256);
 
   private master!: GainNode;
+  /** Master volume, 0 (mute) to 1.5; 1 is the default mix level. */
+  volume = 1;
   private fxSend!: GainNode;
   private analyser!: AnalyserNode;
   private noise!: AudioBuffer;
@@ -102,7 +104,7 @@ export class AudioEngine {
     comp.connect(ctx.destination);
 
     this.master = ctx.createGain();
-    this.master.gain.value = 0.75;
+    this.master.gain.value = 0.75 * this.volume;
     this.master.connect(comp);
 
     this.analyser = ctx.createAnalyser();
@@ -135,6 +137,12 @@ export class AudioEngine {
     this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const data = this.noise.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  }
+
+  /** Set the master volume (0 to 1.5), with a short ramp so it never clicks. */
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1.5, v));
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(0.75 * this.volume, this.ctx.currentTime, 0.03);
   }
 
   get now(): number {
