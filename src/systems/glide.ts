@@ -53,7 +53,7 @@ export class GlideSystem extends createSystem({
   private chords = false;
   private hint!: Label;
   private coach!: SongCoach;
-  private songIndex = -1;
+  private songIndex = 0;
   private guide = glowSprite(COLORS.gold, 0.08, 0.9);
 
   init(): void {
@@ -114,9 +114,17 @@ export class GlideSystem extends createSystem({
         return;
       }
       audio.start();
-      this.songIndex = (this.songIndex + 1) % SCALE_SONGS.length;
       this.coach.start(SCALE_SONGS[this.songIndex]);
       stage.setPebbleLabel('glideLearn', 'Stop song');
+    };
+    stage.actions.glideSong = () => {
+      this.songIndex = (this.songIndex + 1) % SCALE_SONGS.length;
+      const name = SCALE_SONGS[this.songIndex].name;
+      stage.setPebbleLabel('glideSong', `Song: ${name}`);
+      if (this.coach.active) {
+        audio.start();
+        this.coach.start(SCALE_SONGS[this.songIndex]);
+      } else this.hint.set(`${name}: press Learn a song to start`);
     };
     setShown(g, false);
 

@@ -104,6 +104,39 @@ const SONGS: { name: string; bpm: number; notes: string }[] = [
       'E4:1 E4:1 E4:2 E4:1 E4:1 E4:2 E4:1 G4:1 C4:1.5 D4:0.5 E4:4 ' +
       'F4:1 F4:1 F4:1.5 F4:0.5 F4:1 E4:1 E4:1 E4:0.5 E4:0.5 G4:1 G4:1 F4:1 D4:1 C4:4',
   },
+  {
+    name: 'Mary Had a Little Lamb',
+    bpm: 100,
+    notes: 'E4:1 D4:1 C4:1 D4:1 E4:1 E4:1 E4:2 D4:1 D4:1 D4:2 E4:1 G4:1 G4:2 ' +
+      'E4:1 D4:1 C4:1 D4:1 E4:1 E4:1 E4:1 E4:1 D4:1 D4:1 E4:1 D4:1 C4:4',
+  },
+  {
+    name: 'Brother John',
+    bpm: 100,
+    notes: 'C4:1 D4:1 E4:1 C4:1 C4:1 D4:1 E4:1 C4:1 E4:1 F4:1 G4:2 E4:1 F4:1 G4:2 ' +
+      'G4:0.5 A4:0.5 G4:0.5 F4:0.5 E4:1 C4:1 G4:0.5 A4:0.5 G4:0.5 F4:0.5 E4:1 C4:1 ' +
+      'C4:1 G3:1 C4:2 C4:1 G3:1 C4:2',
+  },
+  {
+    name: 'London Bridge',
+    bpm: 100,
+    notes: 'G4:1.5 A4:0.5 G4:1 F4:1 E4:1 F4:1 G4:2 D4:1 E4:1 F4:2 E4:1 F4:1 G4:2 ' +
+      'G4:1.5 A4:0.5 G4:1 F4:1 E4:1 F4:1 G4:2 D4:2 G4:2 E4:1 C4:3',
+  },
+  {
+    name: 'Amazing Grace',
+    bpm: 80,
+    notes: 'G3:1 C4:2 E4:0.5 C4:0.5 E4:2 D4:1 C4:2 A3:1 G3:2 G3:1 ' +
+      'C4:2 E4:0.5 C4:0.5 E4:2 D4:1 G4:3',
+  },
+  {
+    name: 'Fur Elise (opening)',
+    bpm: 66,
+    notes: 'E4:0.5 D#4:0.5 E4:0.5 D#4:0.5 E4:0.5 B3:0.5 D4:0.5 C4:0.5 A3:1.5 ' +
+      'C3:0.5 E3:0.5 A3:0.5 B3:1.5 E3:0.5 G#3:0.5 B3:0.5 C4:1.5 E3:0.5 ' +
+      'E4:0.5 D#4:0.5 E4:0.5 D#4:0.5 E4:0.5 B3:0.5 D4:0.5 C4:0.5 A3:1.5 ' +
+      'C3:0.5 E3:0.5 A3:0.5 B3:1.5 E3:0.5 C4:0.5 B3:0.5 A3:3',
+  },
 ];
 const LETTER: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 /** Parse "E4:1.5" tokens into MIDI note, start and length (seconds). */

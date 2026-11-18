@@ -58,7 +58,6 @@ const ON_COLOR = COLORS.mint;
 
 // Stations from left to right, for the desktop arrow pebbles.
 const ARC: StudioMode[] = ['lattice', 'drums', 'playground', 'piano', 'guitar', 'glide'];
-const DONE_KEY = 'resonance.introDone';
 const CONFIRM_MS = 3000;
 const PRESS_R = 0.03; // fingertip this close to a pebble centre presses it
 const PRESS_RE = 0.055; // and must move this far away to press it again
@@ -101,6 +100,10 @@ const PEBBLES: [string, string, number, number, PebbleMode][] = [
   ['latticeLearn', 'Learn a song', 1, 0, 'lattice'],
   ['glideLearn', 'Learn a song', 1, 0, 'glide'],
   ['pianoSong', 'Song: Twinkle Twinkle', 1, 7, 'piano'],
+  ['drumSong', 'Song: Basics', 1, 6, 'drums'],
+  ['guitarSong', 'Song: Basics', 1, 6, 'guitar'],
+  ['latticeSong', 'Song: Mary Had a Little Lamb', 1, 1, 'lattice'],
+  ['glideSong', 'Song: Mary Had a Little Lamb', 1, 1, 'glide'],
   ['prev', '', -1, 99, 'all'], // arrows: placed separately
   ['next', '', 1, 99, 'all'],
   ['more', 'More', -1, 6, 'all'],
@@ -218,13 +221,9 @@ export class UISystem extends createSystem({
       this.applyVisibility();
     };
 
-    let done = false;
-    try {
-      done = localStorage.getItem(DONE_KEY) === '1';
-    } catch {
-      /* storage unavailable: just show the intro */
-    }
-    this.setStep(done ? 3 : 0);
+    // Every visit opens on the guided tutorial (Skip intro is always there),
+    // so a first-time player is never dropped into the full studio.
+    this.setStep(0);
     this.setupOverlay();
   }
 
@@ -260,11 +259,6 @@ export class UISystem extends createSystem({
     this.hint.set(HINTS[step]);
     this.applyVisibility();
     if (step >= 3) {
-      try {
-        localStorage.setItem(DONE_KEY, '1');
-      } catch {
-        /* ignore */
-      }
       stage.toast(this.world.visibilityState.peek() !== VisibilityState.NonImmersive ? 'Poke the Instrument arrows for more instruments' : 'Use the Instrument arrows for more instruments');
     }
   }

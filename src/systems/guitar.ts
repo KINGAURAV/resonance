@@ -67,13 +67,23 @@ const LESSONS: { name: string; bars: number[]; strokes: string }[] = [
   { name: 'Lesson 1: Strum on the beat', bars: [0, 0], strokes: 'DDDD' },
   { name: 'Lesson 2: Change chords', bars: [0, 1, 0, 1], strokes: 'DDDD' },
   { name: 'Lesson 3: Four-chord song', bars: [0, 1, 2, 3], strokes: 'DDUD' },
+  // Songs (public-domain tunes, simplified to C, G, Am and F): each stands
+  // alone and is chosen with the Song button.
+  { name: 'Twinkle Twinkle', bars: [0, 0, 3, 0, 3, 0, 1, 0], strokes: 'DDDD' },
+  { name: 'When the Saints', bars: [0, 0, 0, 1, 0, 3, 1, 0], strokes: 'DDUD' },
+  { name: 'Amazing Grace', bars: [0, 0, 3, 0, 0, 0, 1, 1], strokes: 'DDUD' },
+  { name: 'Oh Susanna', bars: [0, 0, 0, 1, 0, 0, 1, 0], strokes: 'DUDU' },
+  { name: 'Ballad', bars: [2, 3, 0, 1, 2, 3, 0, 1], strokes: 'DDUD' },
 ];
+const BASICS = 3; // lessons 0-2 run in a row; later entries are single songs
+/** What the Song button cycles through: the basics course, then each song. */
+const PICKS = ['Basics', ...LESSONS.slice(BASICS).map((l) => l.name)];
 const PERFECT = 0.07;
 const BEAT = 60 / 72;
 const HIT_WINDOW = 0.22;
 const LEAD = 0.8;
 const PASS_MARK = 0.7;
-const MAX_BEATS = 16;
+const MAX_BEATS = 32;
 
 const midiFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 const stringY = (i: number) => (2.5 - i) * SPACING;
@@ -100,6 +110,8 @@ export class GuitarSystem extends createSystem({
 
   private learning = false;
   private lesson = 0;
+  private pick = 0; // index into PICKS
+  private lastLesson = BASICS - 1; // the lesson that ends this run
   private startTime = 0;
   private beatState = new Uint8Array(MAX_BEATS);
   private beats = 0;
@@ -225,6 +237,12 @@ export class GuitarSystem extends createSystem({
       this.setHolding(!this.holding);
     };
     stage.actions.learnGuitar = () => (this.learning ? this.stopLearning('Free play') : this.startLearning());
+    stage.actions.guitarSong = () => {
+      this.pick = (this.pick + 1) % PICKS.length;
+      stage.setPebbleLabel('guitarSong', `Song: ${PICKS[this.pick]}`);
+      if (this.learning) this.startLearning();
+      else this.status.set(`${PICKS[this.pick]}: press Learn a song to start`);
+    };
   }
 
   private setHolding(on: boolean): void {
@@ -343,7 +361,8 @@ export class GuitarSystem extends createSystem({
   private startLearning(): void {
     audio.start();
     this.learning = true;
-    this.lesson = 0;
+    this.lesson = this.pick === 0 ? 0 : BASICS + this.pick - 1;
+    this.lastLesson = this.pick === 0 ? BASICS - 1 : this.lesson;
     stage.setPebbleLabel('learnGuitar', 'Stop lesson');
     this.beginAttempt();
   }
@@ -374,8 +393,8 @@ export class GuitarSystem extends createSystem({
     trace('guitar lesson', this.lesson, 'score', this.hits, '/', this.beats);
     if (score >= PASS_MARK) {
       fxAt(stage.stations.guitar, 0, 0.12, 0.05, COLORS.gold, 0, 40);
-      if (this.lesson === LESSONS.length - 1) {
-        this.stopLearning(`You played a song! ${this.hits}/${this.beats}`);
+      if (this.lesson === this.lastLesson) {
+        this.stopLearning(`${this.pick === 0 ? 'You played a song!' : `${LESSONS[this.lesson].name} complete!`} ${this.hits}/${this.beats}`);
         return;
       }
       this.lesson++;
@@ -446,9 +465,10 @@ export class GuitarSystem extends createSystem({
       this.prevTip[h].copy(this.tip);
       this.guitar.worldToLocal(this.tip);
       const { x, y, z } = this.tip;
-      // There is no surface to feel, so real strums wander in depth: accept
-      // a generous slab in front of and slightly behind the strings.
-      const near = z > -0.06 && z < 0.09;
+      // Only a fingertip actually at the strings strums: the strings lie at
+      // z = 0, so allow just the finger's own thickness either side (plus a
+      // little behind, where the finger pushes through toward the body).
+      const near = z > -0.03 && z < 0.018;
 
       // Neck: touching a block selects (and keeps) that chord.
       if (Math.abs(z) < 0.04 && x > NECK_START && x < NECK_START + BLOCK * CHORDS.length && Math.abs(y) < 0.06) {

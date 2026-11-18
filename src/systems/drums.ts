@@ -58,7 +58,16 @@ const LESSONS: { name: string; steps: number[] }[] = [
   { name: 'Lesson 1: Heartbeat', steps: [0, -1, 1, -1, 0, -1, 1, -1] },
   { name: 'Lesson 2: Add the hi-hat', steps: [0, 3, 1, 3, 0, 3, 1, 3] },
   { name: 'Lesson 3: The groove', steps: [0, 3, 1, 3, 0, 0, 1, 2] },
+  // Songs: each stands alone (pick it with the Song button).
+  { name: 'Rock beat', steps: [0, 3, 1, 3, 0, 3, 1, 3, 0, 3, 1, 3, 0, 0, 1, 4] },
+  { name: 'Stomp stomp clap', steps: [0, 0, 1, -1, 0, 0, 1, -1] },
+  { name: 'Marching band', steps: [1, 1, 1, -1, 1, 1, 1, -1, 1, -1, 1, -1, 1, 1, 0, -1] },
+  { name: 'Tom groove', steps: [0, 2, 1, 2, 0, 2, 1, -1, 0, 2, 1, 2, 0, 1, 2, 4] },
+  { name: 'Big finish', steps: [0, 3, 1, 3, 0, 3, 1, 3, 1, 1, 2, 2, 1, 2, 0, 4] },
 ];
+const BASICS = 3; // lessons 0-2 run in a row; later entries are single songs
+/** What the Song button cycles through: the basics course, then each song. */
+const PICKS = ['Basics', ...LESSONS.slice(BASICS).map((l) => l.name)];
 const LESSON_BPM = 80;
 const STEP = 60 / LESSON_BPM / 2; // seconds per eighth note
 const PASS_STEPS = 16; // two bars per attempt
@@ -93,10 +102,13 @@ export class DrumSystem extends createSystem({
   private prevTip = [new Vector3(), new Vector3()];
   private speed = [0, 0];
   private armed = new Uint8Array(2 * KIT.length).fill(1);
+  private prevPadY = new Float32Array(2 * KIT.length).fill(1); // last fingertip height above each pad
 
   // Learn-mode state.
   private learning = false;
   private lesson = 0;
+  private pick = 0; // index into PICKS
+  private lastLesson = BASICS - 1; // the lesson that ends this run
   private startTime = 0; // audio time of step 0 of this attempt
   private noteState = new Uint8Array(PASS_STEPS); // 0 pending, 1 hit, 2 missed
   private clicksScheduled = 0;
@@ -164,12 +176,19 @@ export class DrumSystem extends createSystem({
       }),
     );
     stage.actions.learn = () => (this.learning ? this.stopLearning('Free play') : this.startLearning());
+    stage.actions.drumSong = () => {
+      this.pick = (this.pick + 1) % PICKS.length;
+      stage.setPebbleLabel('drumSong', `Song: ${PICKS[this.pick]}`);
+      if (this.learning) this.startLearning();
+      else this.status.set(`${PICKS[this.pick]}: press Learn a beat to start`);
+    };
   }
 
   private startLearning(): void {
     audio.start();
     this.learning = true;
-    this.lesson = 0;
+    this.lesson = this.pick === 0 ? 0 : BASICS + this.pick - 1;
+    this.lastLesson = this.pick === 0 ? BASICS - 1 : this.lesson;
     stage.setPebbleLabel('learn', 'Stop lesson');
     this.beginAttempt(true);
   }
@@ -207,8 +226,8 @@ export class DrumSystem extends createSystem({
     trace('lesson', this.lesson, 'score', this.hits, '/', total);
     if (score >= PASS_MARK) {
       fxAt(stage.stations.drums, 0, 0.1, 0, COLORS.mint, 0, 40);
-      if (this.lesson === LESSONS.length - 1) {
-        this.stopLearning(`You can drum! ${this.hits}/${total}`);
+      if (this.lesson === this.lastLesson) {
+        this.stopLearning(this.pick === 0 ? `You can drum! ${this.hits}/${total}` : `${LESSONS[this.lesson].name} complete! ${this.hits}/${total}`);
         return;
       }
       this.lesson++;
@@ -284,8 +303,14 @@ export class DrumSystem extends createSystem({
         const radial = Math.hypot(this.local.x, this.local.z);
         const r = pad.def.radius;
         const k = h * KIT.length + id;
+        const prevY = this.prevPadY[k];
+        this.prevPadY[k] = this.local.y;
         if (this.local.y > 0.05 || radial > r + 0.035) this.armed[k] = 1;
-        else if (this.armed[k] && radial < r + 0.008 && this.local.y < 0.028 && this.local.y > -0.05) {
+        // Only a fingertip coming down through the surface strikes: pulling
+        // the finger back up out of the pad must never count as a hit. A fast
+        // strike can jump straight past the surface between hand updates, so
+        // test the crossing rather than the depth.
+        else if (this.armed[k] && radial < r + 0.008 && prevY >= 0.028 && this.local.y < 0.028 && this.local.y > -0.2) {
           this.armed[k] = 0;
           this.strike(id, Math.min(1, Math.max(0.35, speed / 1.0)));
         }

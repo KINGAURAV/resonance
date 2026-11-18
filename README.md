@@ -66,10 +66,18 @@ Competition 2026 — Entertainment track, New Experience division.
   - Playground: **Learn: Echo**, five call-and-response rounds: the shapes
     play a phrase, then you touch the gold shape each time to echo it.
   - Lattice and Glide synth: **Learn a song** (Mary Had a Little Lamb,
-    Amazing Grace, Hot Cross Buns; each press starts the next song). Step 1:
+    Amazing Grace, Hot Cross Buns and more; pick one with Song). Step 1:
     listen while the notes light up. Step 2: play the gold note each time;
     the lesson waits for you and counts wrong notes.
   - Drums: Learn a beat. Guitar: Learn a song. Piano: Learn a song (tiles).
+  - Drums, guitar, piano, Lattice and Glide synth each have a gold **Song** button to pick what to learn:
+    - Drums: Basics, Rock beat, Stomp stomp clap, Marching band, Tom groove, Big finish.
+    - Guitar: Basics, Twinkle Twinkle, When the Saints, Amazing Grace, Oh Susanna, Ballad.
+    - Piano: Twinkle Twinkle, Ode to Joy, Jingle Bells, Mary Had a Little Lamb,
+      Brother John, London Bridge, Amazing Grace, Fur Elise (opening).
+    - Lattice and Glide synth: Mary Had a Little Lamb, Amazing Grace, Hot Cross
+      Buns, Old MacDonald, Camptown Races, Auld Lang Syne.
+- Every visit opens on the guided tutorial (Skip intro is always available).
 - **Hold guitar** (VR): the guitar comes into your hands. The body rests in
   front of your stomach and the neck follows your left hand; slide the left
   hand along the neck to change chord and strum over the body with your right.
@@ -124,6 +132,8 @@ Played on a Meta Quest 3 by the developer during development.
 
 - All sound is synthesized at runtime; there are no audio, image or model files.
 - Lesson songs are traditional, public-domain melodies: Twinkle Twinkle Little
-  Star, Ode to Joy (Beethoven), Jingle Bells (Pierpont, 1857), Mary Had a
-  Little Lamb, Amazing Grace, Hot Cross Buns.
+  Star, Ode to Joy and Fur Elise (Beethoven), Jingle Bells (Pierpont, 1857),
+  Mary Had a Little Lamb, Amazing Grace, Hot Cross Buns, Brother John
+  (Frere Jacques), London Bridge, Old MacDonald, Camptown Races (Foster, 1850),
+  Auld Lang Syne, When the Saints Go Marching In, Oh! Susanna (Foster, 1848).
 - Built on Meta's Immersive Web SDK (`@iwsdk/core`) and Three.js.

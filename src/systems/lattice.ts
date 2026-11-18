@@ -52,7 +52,7 @@ export class LatticeSystem extends createSystem({
 }) {
   private tag!: Label;
   private coach!: SongCoach;
-  private songIndex = -1;
+  private songIndex = 0;
   private guide = glowSprite(COLORS.gold, 0.09, 0.9);
   private tagCell = -1;
   private group = new Group();
@@ -157,9 +157,17 @@ export class LatticeSystem extends createSystem({
       }
       audio.start();
       if (this.arp) stage.actions.arp(); // the lesson needs plain touches
-      this.songIndex = (this.songIndex + 1) % SCALE_SONGS.length;
       this.coach.start(SCALE_SONGS[this.songIndex]);
       stage.setPebbleLabel('latticeLearn', 'Stop song');
+    };
+    stage.actions.latticeSong = () => {
+      this.songIndex = (this.songIndex + 1) % SCALE_SONGS.length;
+      const name = SCALE_SONGS[this.songIndex].name;
+      stage.setPebbleLabel('latticeSong', `Song: ${name}`);
+      if (this.coach.active) {
+        audio.start();
+        this.coach.start(SCALE_SONGS[this.songIndex]);
+      } else this.status.set(`${name}: press Learn a song to start`);
     };
   }
 
